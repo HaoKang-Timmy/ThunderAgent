@@ -1,10 +1,14 @@
-"""Hook to track LLM reasoning time per step (without querying vLLM metrics)."""
+"""Hook to track LLM reasoning time per step and pull vLLM prefix cache metrics."""
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import requests
 
 from sweagent.agent.hooks.abstract import AbstractAgentHook
 from sweagent.types import AgentInfo, StepOutput
@@ -20,7 +24,8 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
     For every agent step, the hook captures a baseline snapshot before the model
     query and another afterwards to compute per-step deltas for prefix cache
     usage and prefill/decode timings. Logs are saved to <instance_dir>/prefix_cache_metrics.jsonl with format:
-    {"step": 0, "timestamp": 1234567890.123, "prefix_cache_hits": 100, "prefix_cache_queries": 200, "hit_rate": 0.5}
+    {"step": 0, "timestamp": 1234567890.123, "prefix_cache_hits_before": 100, "prefix_cache_hits_after": 120,
+     "prefix_cache_queries_before": 200, "prefix_cache_queries_after": 240, ...}
     
     The metrics URL can be set via:
     1. Explicit constructor parameter
@@ -29,7 +34,7 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
     """
 
     def __init__(self, metrics_url: str | None = None, log_file: str = "prefix_cache_metrics.jsonl"):
-        self.metrics_url = metrics_url  # kept for backwards compatibility (unused)
+        self.metrics_url = metrics_url
         self.log_file_name = log_file
         self.log_path: Path | None = None
         self.current_step = 0
@@ -41,6 +46,9 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
         self._first_token_time: float | None = None
         self._first_token_wall_time: float | None = None
         self._llm_duration_accum: float = 0.0
+        self._resolved_metrics_url: str | None = None
+        self._metrics_before_snapshot: dict[str, float | None] | None = None
+        self._metrics_failure_logged = False
 
     def on_init(self, *, agent: DefaultAgent):
         self._agent = agent
@@ -66,6 +74,7 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
         self._first_token_time = None
         self._first_token_wall_time = None
         self._llm_duration_accum = 0.0
+        self._metrics_before_snapshot = None
 
     def on_step_done(self, *, step: StepOutput, info: AgentInfo):
         """Finalize step bookkeeping."""
@@ -75,6 +84,7 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
         self._first_token_time = None
         self._first_token_wall_time = None
         self._llm_duration_accum = 0.0
+        self._metrics_before_snapshot = None
 
     def on_model_query(self, *, messages, agent: str) -> None:  # type: ignore[override]
         self._reasoning_start = time.perf_counter()
@@ -82,12 +92,16 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
         self._prefill_start_wall = time.time()
         self._first_token_time = None
         self._first_token_wall_time = None
+        self._metrics_before_snapshot = self._fetch_prefix_cache_snapshot()
 
     def on_actions_generated(self, *, step: StepOutput) -> None:
         if self._reasoning_start is not None:
             self._llm_duration_accum += time.perf_counter() - self._reasoning_start
             self._reasoning_start = None
-        self._write_record()
+        after_snapshot = self._fetch_prefix_cache_snapshot()
+        before_snapshot = self._metrics_before_snapshot
+        self._metrics_before_snapshot = None
+        self._write_record(before_snapshot, after_snapshot)
 
     def _compute_log_path(self, *, reset_step: bool = False):
         agent = self._agent
@@ -106,7 +120,11 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
             self._prefill_start = None
             self._llm_duration_accum = 0.0
 
-    def _write_record(self) -> None:
+    def _write_record(
+        self,
+        snapshot_before: dict[str, float | None] | None,
+        snapshot_after: dict[str, float | None] | None,
+    ) -> None:
         if self.log_path is None:
             return
         model = getattr(self._agent, "model", None)
@@ -121,8 +139,10 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
             decode_time = 0.0
         input_tokens = getattr(model, "_last_input_tokens", None)
         output_tokens = getattr(model, "_last_output_tokens", None)
+        current_time = time.time()
         record = {
             "step": self.current_step,
+            "timestamp": current_time,
             "first_chunk_timestamp": first_chunk_wall,
             "llm_reasoning_time": self._llm_duration_accum,
             "prefill_time": prefill_time,
@@ -132,13 +152,120 @@ class PrefixCacheMetricsHook(AbstractAgentHook):
             record["input_tokens"] = int(input_tokens)
         if output_tokens is not None:
             record["output_tokens"] = int(output_tokens)
+
+        if snapshot_before is not None:
+            record["metrics_before_timestamp"] = snapshot_before.get("timestamp")
+            if snapshot_before.get("hits") is not None:
+                record["prefix_cache_hits_before"] = snapshot_before["hits"]
+            if snapshot_before.get("queries") is not None:
+                record["prefix_cache_queries_before"] = snapshot_before["queries"]
+
+        if snapshot_after is not None:
+            record["metrics_after_timestamp"] = snapshot_after.get("timestamp")
+            if snapshot_after.get("hits") is not None:
+                record["prefix_cache_hits_after"] = snapshot_after["hits"]
+            if snapshot_after.get("queries") is not None:
+                record["prefix_cache_queries_after"] = snapshot_after["queries"]
+
         try:
             with self.log_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record) + "\n")
         except Exception as exc:
-            import logging
             logging.getLogger(__name__).warning(f"Failed to write prefix cache metrics to {self.log_path}: {exc}")
 
     def _on_first_token(self, perf_time: float, wall_time: float) -> None:
         self._first_token_time = perf_time
         self._first_token_wall_time = wall_time
+
+    def _get_metrics_url(self) -> str:
+        if self._resolved_metrics_url is None:
+            env_url = os.getenv("VLLM_METRICS_URL")
+            url = self.metrics_url or env_url or "http://localhost:8000/metrics"
+            self._resolved_metrics_url = url
+        return self._resolved_metrics_url
+
+    def _fetch_prefix_cache_snapshot(self) -> dict[str, float | None] | None:
+        url = self._get_metrics_url()
+        if not url:
+            return None
+        try:
+            response = requests.get(url, timeout=1.5)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            self._log_metrics_warning(f"Failed to query vLLM metrics at {url}: {exc}")
+            return None
+
+        hits, queries = self._parse_prefix_cache_metrics(response.text)
+        if hits is None and queries is None:
+            self._log_metrics_warning(f"vLLM metrics at {url} did not include prefix cache counters.")
+            return None
+
+        self._metrics_failure_logged = False
+        return {
+            "timestamp": time.time(),
+            "hits": hits,
+            "queries": queries,
+        }
+
+    def _parse_prefix_cache_metrics(self, payload: str) -> tuple[float | None, float | None]:
+        metrics: dict[str, float] = {}
+        for raw_line in payload.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                metric_and_labels, value_str = line.rsplit(None, 1)
+            except ValueError:
+                continue
+            metric_name = metric_and_labels.split("{", 1)[0]
+            if metric_name.endswith("_created"):
+                continue
+            try:
+                value = float(value_str)
+            except ValueError:
+                continue
+            metrics[metric_name] = metrics.get(metric_name, 0.0) + value
+
+        hits = self._select_metric_sum(
+            metrics,
+            [
+                ("vllm:prefix_cache_hits_total",),
+                ("vllm_prefix_cache_hits_total",),
+                ("vllm:prefix_cache_hits",),
+                ("vllm_prefix_cache_hits",),
+                ("vllm:gpu_prefix_cache_hits_total",),
+                ("vllm_gpu_prefix_cache_hits_total",),
+                ("vllm:gpu_prefix_cache_hits",),
+                ("vllm_gpu_prefix_cache_hits",),
+            ],
+        )
+        queries = self._select_metric_sum(
+            metrics,
+            [
+                ("vllm:prefix_cache_queries_total",),
+                ("vllm_prefix_cache_queries_total",),
+                ("vllm:prefix_cache_queries",),
+                ("vllm_prefix_cache_queries",),
+                ("vllm:gpu_prefix_cache_queries_total",),
+                ("vllm_gpu_prefix_cache_queries_total",),
+                ("vllm:gpu_prefix_cache_queries",),
+                ("vllm_gpu_prefix_cache_queries",),
+            ],
+        )
+        return hits, queries
+
+    @staticmethod
+    def _select_metric_sum(
+        metrics: dict[str, float],
+        candidates: list[tuple[str, ...]],
+    ) -> float | None:
+        for names in candidates:
+            values = [metrics[name] for name in names if name in metrics]
+            if values:
+                return sum(values)
+        return None
+
+    def _log_metrics_warning(self, message: str) -> None:
+        if not self._metrics_failure_logged:
+            logging.getLogger(__name__).warning(message)
+            self._metrics_failure_logged = True

@@ -106,7 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("output", type=Path, help="Path to save the figure")
     parser.add_argument("--title", type=str, default="Average Prefill vs Decode per Step", help="Figure title")
     parser.add_argument("--dpi", type=int, default=320, help="Output DPI (default: %(default)s)")
-    parser.add_argument("--max-steps", type=int, default=50, help="Limit to first N steps (default: 50)")
+    parser.add_argument("--max-steps", type=int, default=80, help="Limit to first N steps (default: 50)")
     return parser.parse_args()
 
 
