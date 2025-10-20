@@ -251,18 +251,19 @@ class RunBatch:
     def main(self) -> None:
         self.logger.info("Starting run. Find output files at %s", self.output_dir)
         self._chooks.on_start()
+        try:
+            if self._num_workers <= 1:
+                self.main_single_worker()
+            else:
+                self.main_multi_worker()
 
-        if self._num_workers <= 1:
-            self.main_single_worker()
-        else:
-            self.main_multi_worker()
-
-        output_dirs = []
-        for instance in self.instances:
-            output_dirs.append(self.output_dir / instance.problem_statement.id)
-        merge_predictions(output_dirs, self.output_dir / "preds.json")
-
-        self._chooks.on_end()
+            output_dirs = []
+            for instance in self.instances:
+                output_dirs.append(self.output_dir / instance.problem_statement.id)
+            merge_predictions(output_dirs, self.output_dir / "preds.json")
+        finally:
+            self._cleanup_batch_resources(self.instances)
+            self._chooks.on_end()
 
     def main_single_worker(self) -> None:
         with ExitStack() as stack:
@@ -312,13 +313,11 @@ class RunBatch:
                             executor.shutdown(wait=False, cancel_futures=True)
                             stop = True
                             break
-                        finally:
-                            self._cleanup_batch_resources(batch)
                         if stop:
                             break
                         if start + len(batch) < len(self.instances):
                             self.logger.info(
-                                "Batch completed, throttling for 60 seconds before next batch after cleanup"
+                                "Batch completed, throttling for 60 seconds before next batch"
                             )
                             time.sleep(60)
                 finally:
