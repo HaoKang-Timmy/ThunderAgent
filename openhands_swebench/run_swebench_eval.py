@@ -9,13 +9,16 @@ from pathlib import Path
 VLLM_CMD = [
     "vllm",
     "serve",
-    "/mnt/shared/models/GLM-4.6-FP8",
-    "--kv_cache_dtype",
-    "fp8",
+    "/mnt/shared/Qwen3-Coder-30B-A3B-Instruct",
+    # "--kv_cache_dtype",
+    # "fp8",
     "--port",
     "8100",
     "--tensor-parallel-size",
     "8",
+    "--enable-auto-tool-choice",
+    "--tool-call-parser",
+    "qwen3_coder"
 ]
 
 
@@ -56,9 +59,9 @@ def main() -> int:
             "--split",
             "test",
             "--max-iterations",
-            "100",
+            "50",
             "--eval-num-workers",
-            "128",
+            "1",
             "--eval-output-dir",
             "./outputs",
         ]

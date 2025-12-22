@@ -10,4 +10,4 @@ source "${ROOT_DIR}/.venv/bin/activate"
 cd "${ROOT_DIR}/OpenHands"
 uv pip install -e .
 uv pip install datasets
-uv pip install vllm==0.10.2 --torch-backend=auto
+uv pip install vllm --torch-backend=auto
