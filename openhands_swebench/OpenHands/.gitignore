@@ -242,7 +242,7 @@ logs
 cache
 
 # configuration
-config.toml
+# config.toml
 config.toml_
 config.toml.bak
 
