@@ -1,10 +1,10 @@
 vllm:
-  model: /data/models/GLM-4.5-Air
+  model: /mnt/shared/models/GLM-4.6-FP8
   host: 0.0.0.0
   connect_host: 127.0.0.1
   port: 8000
   wait_timeout: 360
-  tokenizer: /data/models/GLM-4.5-Air
+  tokenizer: /mnt/shared/models/GLM-4.6-FP8
   gpu_memory_utilization: 0.9
   dtype: auto
   max_model_len: 131072
