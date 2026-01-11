@@ -1,40 +1,130 @@
 """Backend state management."""
 import asyncio
-from dataclasses import dataclass, field
-from typing import Dict
+import logging
+from typing import List, Optional
 
-from ..program import ProgramState
+import httpx
+
+from .vllm_metrics import VLLMMetrics
+
+logger = logging.getLogger(__name__)
+
+# Keep only the most recent N metrics samples
+METRICS_HISTORY_SIZE = 12
 
 
-@dataclass
 class BackendState:
-    """State of a single VLLM backend."""
-    url: str
-    usage: float = 0.0
-    healthy: bool = True
-    running_requests: float = 0.0
-    waiting_requests: float = 0.0
-    programs: Dict[str, ProgramState] = field(default_factory=dict)
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    overload_start_time: float = 0.0
-    underload_start_time: float = 0.0
-
-    @property
-    def metrics_url(self) -> str:
-        """Prometheus metrics endpoint."""
-        return f"{self.url}/metrics"
+    """State of a single VLLM backend with self-managed metrics monitoring."""
+    
+    def __init__(self, url: str):
+        self.url = url
+        self.healthy = True
+        self.metrics_history: List[VLLMMetrics] = []
+        
+        # Metrics monitoring (self-managed)
+        self._monitor_task: Optional[asyncio.Task] = None
+        self._monitor_stop = False
+        self._client: Optional[httpx.AsyncClient] = None
 
     @property
     def completions_url(self) -> str:
         """Chat completions API endpoint."""
         return f"{self.url}/v1/chat/completions"
-
+    
     @property
-    def total_inflight(self) -> int:
-        """Number of requests currently being processed."""
-        return sum(1 for p in self.programs.values() if p.inflight)
-
+    def metrics_url(self) -> str:
+        """Prometheus metrics endpoint."""
+        return f"{self.url}/metrics"
+    
     @property
-    def paused_count(self) -> int:
-        """Number of paused programs."""
-        return sum(1 for p in self.programs.values() if p.paused)
+    def latest_metrics(self) -> Optional[VLLMMetrics]:
+        """Get the most recent metrics sample."""
+        return self.metrics_history[-1] if self.metrics_history else None
+    
+    # -------------------------------------------------------------------------
+    # Metrics Monitoring (self-managed)
+    # -------------------------------------------------------------------------
+    
+    async def start_monitoring(self, interval: float = 5.0):
+        """Start background metrics monitoring for this backend."""
+        if self._monitor_task is not None:
+            return  # Already running
+        
+        self._monitor_stop = False
+        self._client = httpx.AsyncClient(timeout=10.0)
+        self._monitor_task = asyncio.create_task(self._monitor_loop(interval))
+        logger.info(f"Started metrics monitoring for {self.url} (interval: {interval}s)")
+    
+    async def stop_monitoring(self):
+        """Stop background metrics monitoring."""
+        if self._monitor_task is None:
+            return
+        
+        self._monitor_stop = True
+        self._monitor_task.cancel()
+        try:
+            await self._monitor_task
+        except asyncio.CancelledError:
+            pass
+        self._monitor_task = None
+        
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+        logger.info(f"Stopped metrics monitoring for {self.url}")
+    
+    async def _monitor_loop(self, interval: float):
+        """Background loop to periodically fetch metrics."""
+        while not self._monitor_stop:
+            try:
+                await self._fetch_metrics()
+            except Exception as e:
+                logger.debug(f"Error fetching metrics from {self.url}: {e}")
+            await asyncio.sleep(interval)
+    
+    async def _fetch_metrics(self) -> bool:
+        """Fetch and update metrics from vLLM /metrics endpoint."""
+        if not self._client:
+            return False
+        try:
+            resp = await self._client.get(self.metrics_url)
+            if resp.status_code == 200:
+                metrics = VLLMMetrics.from_prometheus_text(resp.text)
+                self.metrics_history.append(metrics)
+                # Keep only the most recent samples
+                if len(self.metrics_history) > METRICS_HISTORY_SIZE:
+                    self.metrics_history = self.metrics_history[-METRICS_HISTORY_SIZE:]
+                self.healthy = True
+                return True
+            else:
+                self.healthy = False
+                return False
+        except Exception as e:
+            logger.debug(f"Failed to fetch metrics from {self.url}: {e}")
+            self.healthy = False
+            return False
+    
+    def to_dict(self) -> dict:
+        """Convert to dict for API response."""
+        result = {
+            "url": self.url,
+            "healthy": self.healthy,
+            "monitoring": self._monitor_task is not None,
+        }
+        if self.metrics_history:
+            latest = self.latest_metrics
+            result["metrics"] = {
+                "num_requests_running": latest.num_requests_running,
+                "num_requests_waiting": latest.num_requests_waiting,
+                "kv_cache_usage_perc": round(latest.kv_cache_usage_perc, 4),
+                "prefix_cache_hit_rate": round(latest.prefix_cache_hit_rate, 4),
+                "prefix_cache_queries": latest.prefix_cache_queries,
+                "prefix_cache_hits": latest.prefix_cache_hits,
+                "prompt_tokens_total": latest.prompt_tokens_total,
+                "generation_tokens_total": latest.generation_tokens_total,
+                "num_preemptions": latest.num_preemptions,
+                "requests_completed": latest.total_requests_completed,
+                "last_updated": latest.timestamp,
+                "history_size": len(self.metrics_history),
+            }
+        return result

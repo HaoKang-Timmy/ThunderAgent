@@ -5,9 +5,9 @@ from typing import Any, Dict
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .config import VLLM_BACKENDS
+from .config import get_config
 from .scheduler import MultiBackendRouter
-from .program import ProgramState
+from .program import ProgramStatus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 # FastAPI Application
 # =============================================================================
 
-router = MultiBackendRouter(VLLM_BACKENDS)
-app = FastAPI(title="ThunderReact - Multi-Backend Prefix Cache Router")
+def _create_router() -> MultiBackendRouter:
+    """Create router with current config."""
+    config = get_config()
+    return MultiBackendRouter(config.backends, profile_enabled=config.profile_enabled)
+
+router = _create_router()
+app = FastAPI(title="ThunderReact - Program State Tracking Proxy")
 
 
 @app.on_event("startup")
@@ -30,130 +35,146 @@ async def shutdown_event():
     await router.stop()
 
 
-def get_program_id(payload: Dict[str, Any], _request: Request) -> str:
+def get_program_id(payload: Dict[str, Any]) -> str:
     """Extract program_id from the request."""
-    if "job_id" in payload:
-        return str(payload["job_id"])
+    if "program_id" in payload:
+        return str(payload["program_id"])
     extra_body = payload.get("extra_body", {})
-    if isinstance(extra_body, dict) and "job_id" in extra_body:
-        return str(extra_body["job_id"])
+    if isinstance(extra_body, dict) and "program_id" in extra_body:
+        return str(extra_body["program_id"])
     return "default"
 
 
 @app.post("/v1/chat/completions")
-async def route_chat_completions(request: Request):
-    """Route chat completions request to the appropriate backend."""
+async def chat_completions(request: Request):
+    """Handle chat completions request."""
     try:
         payload = await request.json()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
-    program_id = get_program_id(payload, request)
+    # Get or create program state (auto-assigns to least loaded backend)
+    program_id = get_program_id(payload)
+    state = router.get_or_create_program(program_id)
+    backend = router.get_backend_for_program(program_id)
 
-    while True:
-        backend = router.get_backend_for_program(program_id)
-        backend = await router.apply_pending_transfer(program_id, backend)
-        async with backend.lock:
-            if program_id not in backend.programs:
-                backend.programs[program_id] = ProgramState(
-                    context_len=0, step_count=0
-                )
-            state = backend.programs[program_id]
+    # Update state: now running, calculate context_len and estimate total_tokens
+    router.update_program_before_request(state, payload)
+    
+    # Profile: record request start (if profiling enabled)
+    if state.profile:
+        state.profile.on_request_start()
 
-            if not state.paused:
-                state.inflight = True
-                state.step_count += 1
-                break
+    # Callback to update state after response
+    async def on_usage(total_tokens: int, prompt_tokens: int, cached_tokens: int) -> None:
+        router.update_program_after_request(state, total_tokens)
+        # Profile: record request end with KV cache info
+        if state.profile:
+            state.profile.on_request_end(prompt_tokens, cached_tokens)
 
-            wait_event = state.resume_event
-            wait_state = state
-            wait_state.waiting_on_resume = True
-
-        try:
-            await wait_event.wait()
-        finally:
-            wait_state.waiting_on_resume = False
-
-    async def update_total_tokens(tokens: int) -> None:
-        async with backend.lock:
-            state = backend.programs.get(program_id)
-            if state is not None:
-                state.context_len = tokens
-
-    try:
-        return await router.proxy_request(backend, payload, on_total_tokens=update_total_tokens)
-    finally:
-        async with backend.lock:
-            if program_id in backend.programs:
-                state = backend.programs[program_id]
-                state.inflight = False
+    # Forward to vLLM (sticky routing - same program always goes to same backend)
+    # Pass profile callbacks for token timing
+    return await router.proxy_request(
+        backend, payload,
+        on_usage=on_usage,
+        on_first_token=state.profile.on_first_token if state.profile else None,
+        on_token=state.profile.on_token if state.profile else None,
+    )
 
 
 @app.get("/programs")
 async def list_programs():
-    """List all programs across all backends."""
+    """List all programs (includes profile data if profiling enabled)."""
     result = {}
-    for backend in router.backends.values():
-        async with backend.lock:
-            for pid, s in backend.programs.items():
-                result[pid] = {
-                    "backend": backend.url,
-                    "context_len": s.context_len,
-                    "step": s.step_count,
-                    "inflight": s.inflight,
-                    "paused": s.paused,
-                }
+    for pid, state in router.programs.items():
+        program_data = {
+            "backend": state.backend_url,
+            "context_len": state.context_len,
+            "total_tokens": state.total_tokens,
+            "step_count": state.step_count,
+            "status": state.status.value,
+        }
+        # Include profile data if available
+        if state.profile:
+            program_data["profile"] = state.profile.to_dict()
+        result[pid] = program_data
     return JSONResponse(result)
 
 
 @app.post("/programs/release")
 async def release_program(request: Request):
-    """Force-release a program from router state."""
+    """Release a program."""
     try:
         payload = await request.json()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
-    program_id = payload.get("job_id") or payload.get("program_id")
+    program_id = payload.get("program_id")
     if not program_id:
-        raise HTTPException(status_code=400, detail="Missing job_id")
+        raise HTTPException(status_code=400, detail="Missing program_id")
     program_id = str(program_id)
 
-    released = False
-    for backend in router.backends.values():
-        async with backend.lock:
-            if program_id in backend.programs:
-                del backend.programs[program_id]
-                released = True
-
-    if program_id in router.program_affinity:
-        del router.program_affinity[program_id]
-        released = True
-
-    if released:
-        logger.info(f"Released program {program_id}")
-    return JSONResponse({"job_id": program_id, "released": released})
+    released = router.release_program(program_id)
+    return JSONResponse({"program_id": program_id, "released": released})
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    healthy_backends = [
-        url for url, backend in router.backends.items() if backend.healthy
-    ]
+    stats = router.get_program_stats()
     return JSONResponse({
-        "status": "ok" if healthy_backends else "degraded",
-        "backends": {
-            url: {
-                "healthy": backend.healthy,
-                "usage": backend.usage,
-                "running_requests": backend.running_requests,
-                "waiting_requests": backend.waiting_requests,
-                "programs_count": len(backend.programs),
-                "paused_count": backend.paused_count,
-            }
-            for url, backend in router.backends.items()
-        }
+        "status": "ok",
+        "backends": list(router.backends.keys()),
+        "programs_count": stats["total"],
+        "running_count": stats["running"],
+        "paused_count": stats["paused"],
+        "per_backend": stats["per_backend"],
+        "profile_enabled": router.profile_enabled,
+    })
+
+
+@app.get("/profiles")
+async def list_profiles():
+    """List all program profiles (timing metrics)."""
+    if not router.profile_enabled:
+        return JSONResponse({"error": "Profiling not enabled. Start with --profile flag."}, status_code=400)
+    result = {}
+    for pid, state in router.programs.items():
+        if state.profile:
+            result[pid] = state.profile.to_dict()
+    return JSONResponse(result)
+
+
+@app.get("/profiles/{program_id}")
+async def get_profile(program_id: str):
+    """Get profile for a specific program."""
+    if not router.profile_enabled:
+        return JSONResponse({"error": "Profiling not enabled. Start with --profile flag."}, status_code=400)
+    state = router.programs.get(program_id)
+    if state is None or state.profile is None:
+        raise HTTPException(status_code=404, detail=f"Profile not found for program: {program_id}")
+    return JSONResponse(state.profile.to_dict())
+
+
+@app.get("/v1/models")
+async def list_models():
+    """List available models (proxy to first backend)."""
+    # Forward to the first available backend
+    if not router.backends:
+        return JSONResponse({"object": "list", "data": []})
+    
+    backend_url = next(iter(router.backends.keys()))
+    return await router.proxy_get(backend_url, "/v1/models")
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """Get vLLM metrics from all backends."""
+    config = get_config()
+    return JSONResponse({
+        "metrics_enabled": config.metrics_enabled,
+        "metrics_interval": config.metrics_interval if config.metrics_enabled else None,
+        "backends": {url: backend.to_dict() for url, backend in router.backends.items()},
     })
 
 

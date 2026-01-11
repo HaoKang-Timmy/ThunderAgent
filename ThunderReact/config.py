@@ -1,22 +1,33 @@
-"""ThunderReact configuration constants."""
-import os
+"""ThunderReact configuration."""
+from dataclasses import dataclass, field
+from typing import List
 
-# Backend service configuration
-VLLM_BACKENDS = os.getenv(
-    "VLLM_BACKENDS",
-    "http://localhost:8100"
-).split(",")
 
-# Controller parameters
-THRASHING_DISTANCE = 0.05
-CONTROL_TIME_WINDOW_S = 5.0
-CONTROL_STEP = 0.2
+@dataclass
+class Config:
+    """ThunderReact configuration (set via command line args)."""
+    # Backend configuration
+    backends: List[str] = field(default_factory=lambda: ["http://localhost:8000"])
+    
+    # Profile configuration
+    profile_enabled: bool = False
+    profile_dir: str = "/tmp/thunderreact_profiles"
+    
+    # Metrics monitoring configuration
+    metrics_enabled: bool = False
+    metrics_interval: float = 5.0  # seconds between metrics fetch
 
-# Pause/resume trigger thresholds
-PAUSE_TRIGGER_USAGE = 0.95
-RESUME_TRIGGER_USAGE = 0.85
-TRANSFER_IMBALANCE_TRIGGER = 0.30
 
-# Token budget
-KV_CACHE_TOKEN_BUDGET = 788976
-OUTPUT_TOKEN_ESTIMATE = 500
+# Global config instance (set by __main__.py before app starts)
+_config: Config = Config()
+
+
+def get_config() -> Config:
+    """Get the global config instance."""
+    return _config
+
+
+def set_config(config: Config) -> None:
+    """Set the global config instance."""
+    global _config
+    _config = config

@@ -1,4 +1,4 @@
-from .state import ProgramState
+from .state import ProgramState, ProgramStatus
 
-__all__ = ["ProgramState"]
+__all__ = ["ProgramState", "ProgramStatus"]
 

@@ -1,27 +1,25 @@
 """Program state management."""
-import asyncio
 from dataclasses import dataclass, field
-from typing import Optional
+from enum import Enum
+from typing import Optional, TYPE_CHECKING
 
-from ..config import OUTPUT_TOKEN_ESTIMATE
+if TYPE_CHECKING:
+    from ..profile.state import ProfileState
+
+
+class ProgramStatus(Enum):
+    """Status of a program."""
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPED = "stopped"
 
 
 @dataclass
 class ProgramState:
-    """Runtime state of a single program (task)."""
-    context_len: int
+    """State of a single program (task)."""
+    backend_url: str  # Which backend this program is assigned to
+    status: ProgramStatus = ProgramStatus.PAUSED
+    context_len: int = 0
+    total_tokens: int = 0
     step_count: int = 0
-    inflight: bool = False
-    paused: bool = False
-    transfer_target: Optional[str] = None
-    resume_event: asyncio.Event = field(default_factory=asyncio.Event)
-    waiting_on_resume: bool = False
-
-    @property
-    def est_tokens(self) -> int:
-        """Estimate the token count occupied by this program."""
-        return self.context_len + OUTPUT_TOKEN_ESTIMATE
-
-    def __post_init__(self):
-        if not self.paused:
-            self.resume_event.set()
+    profile: Optional["ProfileState"] = None  # Profile timing data (when profiling enabled)

@@ -3,7 +3,7 @@ vllm:
   host: 0.0.0.0
   connect_host: 127.0.0.1
   port: 8000
-  wait_timeout: 360
+  wait_timeout: 1200
   tokenizer: /mnt/shared/models/GLM-4.6-FP8
   gpu_memory_utilization: 0.9
   dtype: auto
@@ -65,4 +65,16 @@ batch:
     - 64
     - --suffix
     - bs64
+  - label: bs72
+    args:
+    - --num_workers
+    - 72
+    - --suffix
+    - bs72
+  - label: bs96
+    args:
+    - --num_workers
+    - 96
+    - --suffix
+    - bs96
   env: {}

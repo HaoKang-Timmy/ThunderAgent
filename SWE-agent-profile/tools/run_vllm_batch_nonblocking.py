@@ -30,6 +30,12 @@ import run_vllm_batch as blocking
 from run_batch_nonblock import RunBatchConfig, RunBatch
 from sweagent.utils.log import get_logger
 
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
+
 CLEANUP_LOGGER = get_logger("docker-cleanup", emoji="🧹")
 _CLEANUP_PATCH_APPLIED = False
 HEALTH_CHECK_LOGGER = get_logger("vllm-health", emoji="🏥")
@@ -153,6 +159,29 @@ def _cleanup_docker_artifacts(run: Any, instance: Any) -> None:
         _run_docker_command(["docker", "image", "rm", image], ignore_errors=True, logger=logger)
 
 
+THUNDERREACT_LOGGER = get_logger("thunderreact", emoji="⚡")
+
+
+def _release_thunderreact_program(instance_id: str) -> None:
+    """Send release signal to ThunderReact for the given program/instance."""
+    api_base = os.environ.get("THUNDERREACT_API_BASE")
+    if not api_base or not HTTPX_AVAILABLE:
+        return
+    
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"{api_base}/programs/release",
+                json={"program_id": instance_id}
+            )
+            if response.status_code == 200:
+                THUNDERREACT_LOGGER.info(f"Released program: {instance_id}")
+            elif response.status_code != 404:  # 404 is OK (program not found)
+                THUNDERREACT_LOGGER.warning(f"Release failed for {instance_id}: {response.status_code}")
+    except Exception as e:
+        THUNDERREACT_LOGGER.warning(f"Error releasing {instance_id}: {e}")
+
+
 def _install_instance_cleanup_patch() -> None:
     global _CLEANUP_PATCH_APPLIED
     if _CLEANUP_PATCH_APPLIED:
@@ -164,15 +193,22 @@ def _install_instance_cleanup_patch() -> None:
         try:
             return original_run_instance(self, instance, *args, **kwargs)
         finally:
+            instance_id = getattr(getattr(instance, "problem_statement", None), "id", "<unknown>")
+            
+            # Docker cleanup
             try:
                 _cleanup_docker_artifacts(self, instance)
             except Exception as exc:  # noqa: BLE001
-                instance_id = getattr(getattr(instance, "problem_statement", None), "id", "<unknown>")
                 CLEANUP_LOGGER.warning(
                     "Encountered error while cleaning docker artifacts for %s: %s",
                     instance_id,
                     exc,
                 )
+            
+            # ThunderReact release - use numeric program_id, not instance_id
+            program_id = getattr(instance, "_thunderreact_program_id", None)
+            if program_id is not None:
+                _release_thunderreact_program(str(program_id))
 
     RunBatch.run_instance = run_instance_with_cleanup  # type: ignore[assignment]
     _CLEANUP_PATCH_APPLIED = True
@@ -301,54 +337,40 @@ def health_monitor_thread(
 
 
 def build_thunderreact_command(
-    server_cfg: dict, 
-    thunderreact_path: str, 
-    proxy_port: int, 
-    enable_logging: bool = False,
-    enable_system_profiling: bool = False,
-    profiling_interval: float = 0.5
-) -> list[str]:
-    """Build ThunderReact command that wraps vLLM"""
+    thunderreact_path: str,
+    proxy_port: int,
+    host: str = "0.0.0.0",
+    backends: str = "http://localhost:8000",
+    profile: bool = False,
+    profile_dir: str = "/tmp/thunderreact_profiles",
+    metrics: bool = False,
+    metrics_interval: float = 5.0,
+) -> tuple[list[str], str]:
+    """Build ThunderReact proxy command.
+    
+    Runs as: python -m ThunderReact --host HOST --port PORT --backends BACKENDS [--profile] [--profile-dir DIR]
+    Similar to how vLLM is started with: python -m vllm.entrypoints.openai.api_server
+    
+    Returns:
+        tuple: (command list, working directory)
+    """
+    # Extract package name from path (e.g., "ThunderReact" from "/path/to/ThunderReact")
+    package_name = os.path.basename(os.path.normpath(thunderreact_path))
+    # Parent directory where the package can be imported from
+    parent_dir = os.path.dirname(os.path.normpath(thunderreact_path))
+    
     cmd = [
-        sys.executable,
-        thunderreact_path,
-        "--auto-start-vllm",
+        sys.executable, "-m", package_name,
+        "--host", host,
         "--port", str(proxy_port),
-        "--vllm-port", str(server_cfg.get("port", 8000)),
-        "--log-dir", "./thunderreact_logs",
-        # Remove --verbose to avoid console spam
+        "--backends", backends,
+        "--log-level", "info",
     ]
-    
-    # Add --enable-logging if requested
-    if enable_logging:
-        cmd.append("--enable-logging")
-    
-    # Add system profiling parameters if requested
-    if enable_system_profiling:
-        cmd.append("--enable-system-profiling")
-        cmd.extend(["--profiling-interval", str(profiling_interval)])
-        # Output file will be in thunderreact_logs/system_metrics.json by default
-    
-    # Add all vLLM parameters
-    if "model" in server_cfg:
-        cmd.extend(["--model", str(server_cfg["model"])])
-    if "tokenizer" in server_cfg:
-        cmd.extend(["--tokenizer", str(server_cfg["tokenizer"])])
-    if "host" in server_cfg:
-        cmd.extend(["--host", str(server_cfg["host"])])
-    if "gpu_memory_utilization" in server_cfg:
-        cmd.extend(["--gpu-memory-utilization", str(server_cfg["gpu_memory_utilization"])])
-    if "dtype" in server_cfg:
-        cmd.extend(["--dtype", str(server_cfg["dtype"])])
-    if "max_model_len" in server_cfg:
-        cmd.extend(["--max-model-len", str(server_cfg["max_model_len"])])
-    
-    # Add extra_args from config
-    if "extra_args" in server_cfg:
-        for arg in server_cfg["extra_args"]:
-            cmd.append(str(arg))
-    
-    return cmd
+    if profile:
+        cmd.extend(["--profile", "--profile-dir", profile_dir])
+    if metrics:
+        cmd.extend(["--metrics", "--metrics-interval", str(metrics_interval)])
+    return cmd, parent_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -377,30 +399,35 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--thunderreact-path",
-        default="/root/workspace/MultiagentSystem/thunderreact/simple_proxy.py",
-        help="Path to ThunderReact simple_proxy.py script.",
+        default="/mnt/shared/MultiagentSystem/ThunderReact",
+        help="Path to ThunderReact project directory.",
     )
     parser.add_argument(
         "--proxy-port",
         type=int,
-        default=9000,
+        default=8300,
         help="ThunderReact proxy port (only used with --use-thunderreact).",
     )
     parser.add_argument(
-        "--enable-proxy-logging",
+        "--thunderreact-profile",
         action="store_true",
-        help="Enable ThunderReact request/response logging to files.",
+        help="Enable ThunderReact profiling (track prefill/decode/tool_call times).",
     )
     parser.add_argument(
-        "--enable-system-profiling",
-        action="store_true",
-        help="Enable system-wide resource profiling (GPU/CPU/Memory/Disk).",
+        "--thunderreact-profile-dir",
+        default=None,  # Will be auto-set based on --only-runs if not specified
+        help="Directory for ThunderReact profile CSV output. Default: /tmp/thunderreact_profiles/<run_label>",
     )
     parser.add_argument(
-        "--profiling-interval",
+        "--thunderreact-metrics",
+        action="store_true",
+        help="Enable ThunderReact vLLM metrics monitoring.",
+    )
+    parser.add_argument(
+        "--thunderreact-metrics-interval",
         type=float,
-        default=0.5,
-        help="System profiling sampling interval in seconds (default: 0.5).",
+        default=5.0,
+        help="Interval in seconds between metrics fetches (default: 5.0).",
     )
     parser.add_argument(
         "--health-check-interval",
@@ -412,6 +439,12 @@ def parse_args() -> argparse.Namespace:
         "--disable-health-check",
         action="store_true",
         help="Disable automatic server health monitoring and restart.",
+    )
+    parser.add_argument(
+        "--external-vllm",
+        action="store_true",
+        help="Use externally started vLLM server instead of launching one. "
+             "Assumes vLLM is already running on the configured host:port.",
     )
     return parser.parse_args()
 
@@ -470,26 +503,51 @@ def main() -> int:
         raise ValueError("batch.runs must be a sequence if provided")
 
     selected_runs = set(args.only_runs or [])
+    
+    # Set default profile dir based on run label
+    if args.thunderreact_profile_dir is None:
+        run_label = args.only_runs[0] if args.only_runs else "default"
+        args.thunderreact_profile_dir = f"/tmp/thunderreact_profiles/{run_label}"
 
-    # Build server command (vLLM or ThunderReact)
+    # Build server command (always start vLLM first)
+    connect_host = str(server_cfg.get("connect_host", server_cfg.get("host", "127.0.0.1")))
+    vllm_port = int(server_cfg.get("port", 8000))
+    vllm_cmd = blocking.build_vllm_command(server_cfg)
+    
     if args.use_thunderreact:
-        server_cmd = build_thunderreact_command(
-            server_cfg, 
+        # When using ThunderReact: vLLM + ThunderReact proxy
+        vllm_backend_url = f"http://{connect_host}:{vllm_port}"
+        thunderreact_cmd, thunderreact_cwd = build_thunderreact_command(
             args.thunderreact_path, 
-            args.proxy_port, 
-            args.enable_proxy_logging,
-            args.enable_system_profiling,
-            args.profiling_interval
+            args.proxy_port,
+            connect_host,
+            backends=vllm_backend_url,
+            profile=args.thunderreact_profile,
+            profile_dir=args.thunderreact_profile_dir,
+            metrics=args.thunderreact_metrics,
+            metrics_interval=args.thunderreact_metrics_interval,
         )
-        print("Starting ThunderReact proxy (wrapping vLLM):", " ".join(server_cmd))
-        # Update config to point to proxy port
-        connect_host = str(server_cfg.get("connect_host", server_cfg.get("host", "127.0.0.1")))
-        port = args.proxy_port  # Use proxy port instead of vLLM port
+        
+        print("Starting vLLM server:", " ".join(vllm_cmd))
+        print("Starting ThunderReact proxy:", " ".join(thunderreact_cmd))
+        if args.thunderreact_profile:
+            print(f"📊 ThunderReact profiling enabled - CSV: {args.thunderreact_profile_dir}/step_profiles.csv")
+        
+        # SWE-agent connects to ThunderReact, not vLLM directly
+        port = args.proxy_port
+        thunderreact_api_base = f"http://{connect_host}:{port}/v1"
+        batch_args = list(batch_args) + [f"--agent.model.api_base={thunderreact_api_base}"]
+        print(f"🔗 SWE-agent will connect to ThunderReact at: {thunderreact_api_base}")
+        
+        # Set env var for ThunderReact release hook (base URL without /v1)
+        os.environ["THUNDERREACT_API_BASE"] = f"http://{connect_host}:{port}"
     else:
-        server_cmd = blocking.build_vllm_command(server_cfg)
-        print("Starting vLLM server:", " ".join(server_cmd))
-        connect_host = str(server_cfg.get("connect_host", server_cfg.get("host", "127.0.0.1")))
-        port = int(server_cfg.get("port", 8000))
+        # Direct vLLM mode
+        thunderreact_cmd = None
+        os.environ.pop("THUNDERREACT_API_BASE", None)  # Ensure hook is not used
+        thunderreact_cwd = None
+        print("Starting vLLM server:", " ".join(vllm_cmd))
+        port = vllm_port
 
     if args.dry_run:
         print("[dry-run] would wait for server and run sweagent batch (non-blocking)")
@@ -510,31 +568,51 @@ def main() -> int:
             raise ValueError(f"Requested runs not found in config: {missing}")
         return 0
 
-    server_proc = subprocess.Popen(server_cmd, env=blocking._merge_env(server_cfg.get("env")))
+    # Start vLLM server (unless using external)
+    if args.external_vllm:
+        print(f"🔗 Using external vLLM server at {connect_host}:{vllm_port}")
+        vllm_proc = None
+    else:
+        vllm_proc = subprocess.Popen(vllm_cmd, env=blocking._merge_env(server_cfg.get("env")))
+    thunderreact_proc = None
     server_proc_lock = threading.Lock()
     health_monitor_stop = threading.Event()
     health_monitor = None
     
     def update_server_proc(new_proc: subprocess.Popen):
-        """Callback to update server_proc reference when restarted"""
-        nonlocal server_proc
+        """Callback to update vllm_proc reference when restarted"""
+        nonlocal vllm_proc
         with server_proc_lock:
-            server_proc = new_proc
+            vllm_proc = new_proc
     
     try:
+        # Wait for vLLM to be ready
         timeout = int(server_cfg.get("wait_timeout", raw_config.get("wait_timeout", 180)))
-        blocking.wait_for_server(connect_host, port, timeout)
+        blocking.wait_for_server(connect_host, vllm_port, timeout)
+        print(f"✅ vLLM server is ready on port {vllm_port}")
         
-        # Start health monitor thread (unless disabled)
-        if not args.disable_health_check and args.health_check_interval > 0:
+        # Start ThunderReact if enabled
+        if args.use_thunderreact and thunderreact_cmd:
+            thunderreact_proc = subprocess.Popen(
+                thunderreact_cmd, 
+                cwd=thunderreact_cwd,  # Run from parent directory so package imports work
+            )
+            # Wait for ThunderReact to be ready
+            blocking.wait_for_server(connect_host, args.proxy_port, timeout=30)
+            print(f"✅ ThunderReact proxy is ready on port {args.proxy_port}")
+        
+        # Start health monitor thread for vLLM (unless disabled or using external vLLM)
+        if args.external_vllm:
+            HEALTH_CHECK_LOGGER.info("Health monitoring disabled (using external vLLM)")
+        elif not args.disable_health_check and args.health_check_interval > 0:
             health_check_interval = args.health_check_interval
             health_monitor = threading.Thread(
                 target=health_monitor_thread,
                 args=(
                     connect_host,
-                    port,
-                    server_proc,
-                    server_cmd,
+                    vllm_port,  # Monitor vLLM, not the proxy
+                    vllm_proc,
+                    vllm_cmd,
                     blocking._merge_env(server_cfg.get("env")),
                     health_monitor_stop,
                     update_server_proc,
@@ -552,20 +630,12 @@ def main() -> int:
             HEALTH_CHECK_LOGGER.info("Health monitoring disabled")
         
         if args.use_thunderreact:
-            print(f"ThunderReact proxy is ready on port {port}. Running sweagent batch (non-blocking)...")
-            if args.enable_proxy_logging:
-                print(f"📝 Request/response logs: ./thunderreact_logs/{{requests,responses}}.jsonl")
-            else:
-                print(f"📝 Request/response logging disabled (add --enable-proxy-logging to enable)")
-            
-            if args.enable_system_profiling:
-                print(f"📊 System profiling enabled:")
-                print(f"   Output: ./thunderreact_logs/system_metrics.json")
-                print(f"   Interval: {args.profiling_interval}s")
-            else:
-                print(f"📊 System profiling disabled (add --enable-system-profiling to enable)")
+            print(f"🚀 Running sweagent batch (non-blocking)...")
+            print(f"   vLLM: http://{connect_host}:{vllm_port}")
+            print(f"   ThunderReact: http://{connect_host}:{port}")
+            print(f"   Programs API: http://{connect_host}:{port}/programs")
         else:
-            print("vLLM server is ready. Running sweagent batch (non-blocking)...")
+            print("🚀 vLLM server is ready. Running sweagent batch (non-blocking)...")
 
         exit_code = 0
         seen: set[str] = set()
@@ -602,13 +672,18 @@ def main() -> int:
             health_monitor_stop.set()
             health_monitor.join(timeout=5)
         
-        # Stop server
-        if args.use_thunderreact:
-            print("Stopping ThunderReact proxy (and vLLM)...")
-        else:
+        # Stop servers
+        if args.use_thunderreact and thunderreact_proc is not None:
+            print("Stopping ThunderReact proxy...")
+            blocking.terminate_process(thunderreact_proc)
+        
+        # Only stop vLLM if we started it (not using external)
+        if not args.external_vllm and vllm_proc is not None:
             print("Stopping vLLM server...")
-        with server_proc_lock:
-            blocking.terminate_process(server_proc)
+            with server_proc_lock:
+                blocking.terminate_process(vllm_proc)
+        elif args.external_vllm:
+            print("External vLLM server left running.")
 
 
 if __name__ == "__main__":

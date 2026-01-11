@@ -657,6 +657,13 @@ class LiteLLMModel(AbstractModel):
         if self.config.custom_tokenizer is not None:
             self.custom_tokenizer = litellm.utils.create_pretrained_tokenizer(**self.config.custom_tokenizer)
 
+        # Program ID for request tracking
+        self._program_id: int | None = None
+
+    def set_program_id(self, program_id: int) -> None:
+        """Set program ID for request tracking. This ID will be included in extra_body of API requests."""
+        self._program_id = program_id
+
     @property
     def instance_cost_limit(self) -> float:
         """Cost limit for the model. Returns 0 if there is no limit."""
@@ -749,6 +756,10 @@ class LiteLLMModel(AbstractModel):
             chat_kwargs = extra_body.setdefault("chat_template_kwargs", {})
             chat_kwargs.setdefault("thinking", False)
             extra_body.setdefault("enable_thinking", False)
+        # Add program_id to extra_body for request tracking
+        if self._program_id is not None:
+            extra_body = completion_kwargs.setdefault("extra_body", {})
+            extra_body["program_id"] = self._program_id
         if self.lm_provider == "anthropic":
             completion_kwargs["max_tokens"] = self.model_max_output_tokens
         use_stream = isinstance(self.config, VLLMModelConfig)
@@ -843,6 +854,10 @@ class LiteLLMModel(AbstractModel):
             chat_kwargs = extra_body.setdefault("chat_template_kwargs", {})
             chat_kwargs.setdefault("thinking", False)
             extra_body.setdefault("enable_thinking", False)
+        # Add program_id to extra_body for request tracking
+        if self._program_id is not None:
+            extra_body = completion_kwargs.setdefault("extra_body", {})
+            extra_body["program_id"] = self._program_id
         completion_kwargs["stream"] = True
         n_choices = n or 1
         texts: Dict[int, str] = {idx: "" for idx in range(n_choices)}

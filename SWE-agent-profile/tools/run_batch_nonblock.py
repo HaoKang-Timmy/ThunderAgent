@@ -39,6 +39,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 from pathlib import Path
+from threading import Lock
 from typing import Self
 
 import yaml
@@ -49,6 +50,7 @@ from swerex.deployment.hooks.status import SetStatusDeploymentHook
 
 from sweagent import TRAJECTORY_DIR
 from sweagent.agent.agents import AgentConfig, get_agent_from_config
+from sweagent.agent.models import LiteLLMModel
 from sweagent.agent.hooks.stage_timing import StageTimingAgentHook
 # from sweagent.agent.hooks.gpu_monitor import GpuMetricsHook  # Disabled: use ThunderReact's global profiling
 from sweagent.agent.hooks.prefix_cache_metrics import PrefixCacheMetricsHook
@@ -188,6 +190,17 @@ class RunBatch:
         )
         self._show_progress_bar = progress_bar
         self._random_delay_multiplier = random_delay_multiplier
+
+        # Program ID counter for request tracking (thread-safe)
+        self._next_program_id = 0
+        self._program_id_lock = Lock()
+
+    def _get_next_program_id(self) -> int:
+        """Get the next program ID (thread-safe)."""
+        with self._program_id_lock:
+            program_id = self._next_program_id
+            self._next_program_id += 1
+            return program_id
 
     @property
     def _model_id(self) -> str:
@@ -339,6 +352,15 @@ class RunBatch:
         output_dir.mkdir(parents=True, exist_ok=True)
         self.agent_config.name = f"{instance.problem_statement.id}"
         agent = get_agent_from_config(self.agent_config)
+
+        # Set program_id for request tracking
+        program_id = self._get_next_program_id()
+        if hasattr(agent, 'model') and isinstance(agent.model, LiteLLMModel):
+            agent.model.set_program_id(program_id)
+            self.logger.debug(f"Set program_id={program_id} for instance {instance.problem_statement.id}")
+        # Store on instance for cleanup patch to release ThunderReact
+        instance._thunderreact_program_id = program_id
+
         single_run_replay_config = RunSingleConfig(
             agent=self.agent_config,
             problem_statement=instance.problem_statement,

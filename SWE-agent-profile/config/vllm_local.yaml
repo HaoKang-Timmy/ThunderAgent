@@ -70,7 +70,7 @@ agent:
       last_n_messages: 8
   model:
     type: vllm
-    name: /data/models/GLM-4.5-Air
+    name: /mnt/shared/models/GLM-4.6-FP8
     api_base: http://127.0.0.1:8000/v1
     api_key: "dummy"
     custom_llm_provider: openai
