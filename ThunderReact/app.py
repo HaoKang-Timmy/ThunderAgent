@@ -55,30 +55,30 @@ async def chat_completions(request: Request):
 
     # Get or create program state (auto-assigns to least loaded backend)
     program_id = get_program_id(payload)
-    state = router.get_or_create_program(program_id)
+    program_state = router.get_or_create_program(program_id)
     backend = router.get_backend_for_program(program_id)
 
     # Update state: now running, calculate context_len and estimate total_tokens
-    router.update_program_before_request(state, payload)
+    router.update_program_before_request(program_state, payload)
     
     # Profile: record request start (if profiling enabled)
-    if state.profile:
-        state.profile.on_request_start()
+    if program_state.profile:
+        program_state.profile.on_request_start()
 
     # Callback to update state after response
     async def on_usage(total_tokens: int, prompt_tokens: int, cached_tokens: int) -> None:
-        router.update_program_after_request(state, total_tokens)
+        router.update_program_after_request(program_state, total_tokens)
         # Profile: record request end with KV cache info
-        if state.profile:
-            state.profile.on_request_end(prompt_tokens, cached_tokens)
+        if program_state.profile:
+            program_state.profile.on_request_end(prompt_tokens, cached_tokens)
 
     # Forward to vLLM (sticky routing - same program always goes to same backend)
     # Pass profile callbacks for token timing
     return await router.proxy_request(
         backend, payload,
         on_usage=on_usage,
-        on_first_token=state.profile.on_first_token if state.profile else None,
-        on_token=state.profile.on_token if state.profile else None,
+        on_first_token=program_state.profile.on_first_token if program_state.profile else None,
+        on_token=program_state.profile.on_token if program_state.profile else None,
     )
 
 
@@ -126,7 +126,8 @@ async def health_check():
         "status": "ok",
         "backends": list(router.backends.keys()),
         "programs_count": stats["total"],
-        "running_count": stats["running"],
+        "reasoning_count": stats["reasoning"],
+        "acting_count": stats["acting"],
         "paused_count": stats["paused"],
         "per_backend": stats["per_backend"],
         "profile_enabled": router.profile_enabled,

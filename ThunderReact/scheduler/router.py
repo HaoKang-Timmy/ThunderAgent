@@ -75,6 +75,7 @@ class MultiBackendRouter:
     def select_backend_for_new_program(self) -> BackendState:
         """Select the least loaded backend for a new program."""
         # Count programs per backend
+        #### TODO change backend assign logistics
         backend_load: Dict[str, int] = {url: 0 for url in self.backends}
         for state in self.programs.values():
             if state.backend_url in backend_load:
@@ -115,21 +116,26 @@ class MultiBackendRouter:
     def update_program_before_request(self, state: ProgramState, payload: Dict[str, Any]) -> None:
         """Update program state before sending request to vLLM.
         
+        Sets status to REASONING (on GPU, running inference).
         """
-        state.status = ProgramStatus.RUNNING
+        state.status = ProgramStatus.REASONING
         state.step_count += 1
         
-        # context_len = payload 的字符串长度
+        # context_len = string length of payload
+        # pre assign total_tokens for step1 program
         import json
         state.context_len = len(json.dumps(payload, ensure_ascii=False))
         
-        # 首次请求时，用 context_len / 10 估算 total_tokens
+        # On first request, estimate total_tokens from context_len
         if state.step_count == 1:
-            state.total_tokens = state.context_len // 10
+            state.total_tokens = state.context_len // 5
 
     def update_program_after_request(self, state: ProgramState, total_tokens: int) -> None:
-        """Update program state after receiving response from vLLM."""
-        state.status = ProgramStatus.PAUSED
+        """Update program state after receiving response from vLLM.
+        
+        Sets status to ACTING (off GPU, executing tool).
+        """
+        state.status = ProgramStatus.ACTING
         state.total_tokens = total_tokens
 
     def release_program(self, program_id: str) -> bool:
@@ -149,7 +155,8 @@ class MultiBackendRouter:
 
     def get_program_stats(self) -> Dict[str, Any]:
         """Get statistics about all programs."""
-        running = sum(1 for p in self.programs.values() if p.status == ProgramStatus.RUNNING)
+        reasoning = sum(1 for p in self.programs.values() if p.status == ProgramStatus.REASONING)
+        acting = sum(1 for p in self.programs.values() if p.status == ProgramStatus.ACTING)
         paused = sum(1 for p in self.programs.values() if p.status == ProgramStatus.PAUSED)
         
         # Per-backend stats
@@ -158,13 +165,15 @@ class MultiBackendRouter:
             progs = self.get_programs_on_backend(url)
             per_backend[url] = {
                 "total": len(progs),
-                "running": sum(1 for p in progs.values() if p.status == ProgramStatus.RUNNING),
+                "reasoning": sum(1 for p in progs.values() if p.status == ProgramStatus.REASONING),
+                "acting": sum(1 for p in progs.values() if p.status == ProgramStatus.ACTING),
                 "paused": sum(1 for p in progs.values() if p.status == ProgramStatus.PAUSED),
             }
         
         return {
             "total": len(self.programs),
-            "running": running,
+            "reasoning": reasoning,
+            "acting": acting,
             "paused": paused,
             "per_backend": per_backend,
         }

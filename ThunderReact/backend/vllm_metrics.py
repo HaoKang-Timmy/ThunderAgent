@@ -1,8 +1,43 @@
 """vLLM metrics parsing and storage."""
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 import re
 import time
+
+
+@dataclass
+class VLLMCacheConfig:
+    """Static KV cache configuration from vLLM (fetched once at startup)."""
+    block_size: int = 0          # Tokens per block
+    num_gpu_blocks: int = 0      # Total GPU blocks
+    
+    @property
+    def total_tokens_capacity(self) -> int:
+        """Total KV cache capacity in tokens."""
+        return self.block_size * self.num_gpu_blocks
+    
+    @classmethod
+    def from_prometheus_text(cls, text: str) -> "VLLMCacheConfig":
+        """Parse cache_config_info from Prometheus metrics text."""
+        config = cls()
+        
+        # Extract block_size and num_gpu_blocks from labels
+        # vllm:cache_config_info{block_size="16",...,num_gpu_blocks="27283",...} 1.0
+        match = re.search(r'vllm:cache_config_info\{([^}]+)\}', text)
+        if match:
+            labels = match.group(1)
+            
+            # Extract block_size
+            bs_match = re.search(r'block_size="(\d+)"', labels)
+            if bs_match:
+                config.block_size = int(bs_match.group(1))
+            
+            # Extract num_gpu_blocks
+            ngb_match = re.search(r'num_gpu_blocks="(\d+)"', labels)
+            if ngb_match:
+                config.num_gpu_blocks = int(ngb_match.group(1))
+        
+        return config
 
 
 @dataclass

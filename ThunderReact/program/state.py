@@ -8,10 +8,19 @@ if TYPE_CHECKING:
 
 
 class ProgramStatus(Enum):
-    """Status of a program."""
-    RUNNING = "running"
-    PAUSED = "paused"
-    STOPPED = "stopped"
+    """Status of a program.
+    
+    Lifecycle:
+        PAUSED -> REASONING (request starts, GPU inference)
+        REASONING -> ACTING (response received, executing tool)
+        ACTING -> REASONING (next request starts)
+        ACTING -> PAUSED (explicitly paused)
+        * -> STOPPED (program released)
+    """
+    REASONING = "reasoning"  # On GPU, running inference
+    ACTING = "acting"        # Off GPU, executing tool
+    PAUSED = "paused"        # Waiting (not actively processing)
+    STOPPED = "stopped"      # Program completed/released
 
 
 @dataclass
