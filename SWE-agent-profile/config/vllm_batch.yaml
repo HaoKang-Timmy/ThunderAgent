@@ -5,7 +5,7 @@ vllm:
   port: 8000
   wait_timeout: 1200
   tokenizer: /mnt/shared/models/GLM-4.6-FP8
-  gpu_memory_utilization: 0.9
+  gpu_memory_utilization: 0.8
   dtype: auto
   max_model_len: 131072
   extra_args:
