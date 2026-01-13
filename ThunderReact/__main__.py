@@ -13,6 +13,8 @@ def main() -> int:
     parser.add_argument("--log-level", default="info", help="Log level")
     parser.add_argument("--backends", default="http://localhost:8000", 
                         help="Comma-separated list of vLLM backend URLs")
+    parser.add_argument("--router", default="tr", choices=["default", "tr"],
+                        help="Router mode: 'default' (pure proxy) or 'tr' (capacity scheduling)")
     parser.add_argument("--profile", action="store_true", 
                         help="Enable profiling (track prefill/decode/tool_call times)")
     parser.add_argument("--profile-dir", default="/tmp/thunderreact_profiles", 
@@ -29,6 +31,7 @@ def main() -> int:
     backends = [b.strip() for b in args.backends.split(",") if b.strip()]
     config = Config(
         backends=backends,
+        router_mode=args.router,
         profile_enabled=args.profile,
         profile_dir=args.profile_dir,
         metrics_enabled=args.metrics,
@@ -36,6 +39,7 @@ def main() -> int:
     )
     set_config(config)
     
+    print(f"🚀 Router mode: {args.router}")
     if args.profile:
         print(f"📊 Profiling enabled - CSV output: {args.profile_dir}/step_profiles.csv")
     

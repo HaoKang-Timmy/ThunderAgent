@@ -15,14 +15,17 @@ from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
-# Interval for periodic capacity check (seconds)
-CAPACITY_CHECK_INTERVAL = 2.0
-
 
 class MultiBackendRouter:
     """Router with program state tracking, supports multiple backends."""
 
-    def __init__(self, backend_urls: str | List[str], *, profile_enabled: bool = False) -> None:
+    def __init__(
+        self, 
+        backend_urls: str | List[str], 
+        *, 
+        profile_enabled: bool = False,
+        scheduling_enabled: bool = True,
+    ) -> None:
         # Support single URL string or list of URLs
         if isinstance(backend_urls, str):
             backend_urls = [url.strip() for url in backend_urls.split(",") if url.strip()]
@@ -38,14 +41,14 @@ class MultiBackendRouter:
         
         # Profile configuration
         self.profile_enabled = profile_enabled
+        
+        # Scheduling mode: True = "tr" (capacity scheduling), False = "default" (pure proxy)
+        self.scheduling_enabled = scheduling_enabled
 
         self.client = httpx.AsyncClient(
             timeout=900.0,
             limits=httpx.Limits(max_connections=None, max_keepalive_connections=None),
         )
-        
-        # Capacity check task
-        self._capacity_check_task: Optional[asyncio.Task] = None
 
     async def start(self):
         """Start the router."""
@@ -60,21 +63,9 @@ class MultiBackendRouter:
         if config.metrics_enabled:
             for backend in self.backends.values():
                 await backend.start_monitoring(config.metrics_interval)
-        
-        # Start capacity check task
-        self._capacity_check_task = asyncio.create_task(self._capacity_check_loop())
 
     async def stop(self):
         """Stop the router."""
-        # Stop capacity check task
-        if self._capacity_check_task:
-            self._capacity_check_task.cancel()
-            try:
-                await self._capacity_check_task
-            except asyncio.CancelledError:
-                pass
-            self._capacity_check_task = None
-        
         # Stop metrics monitoring on each backend
         for backend in self.backends.values():
             await backend.stop_monitoring()
@@ -138,14 +129,12 @@ class MultiBackendRouter:
     async def update_program_before_request(self, program_id: str, state: ProgramState, payload: Dict[str, Any]) -> bool:
         """Update program state before sending request to vLLM.
         
-        Checks capacity and may pause the program if over capacity.
-        Sets status to REASONING (on GPU, running inference).
+        If scheduling_enabled=False (default mode): pure proxy, no capacity checks.
+        If scheduling_enabled=True (tr mode): full capacity-based scheduling.
         
-        Returns: True if can proceed, False if should not proceed (shouldn't happen normally)
+        Returns: True if can proceed
         """
         state.step_count += 1
-        
-        # context_len = string length of payload
         state.context_len = len(json.dumps(payload, ensure_ascii=False))
         
         backend = self.backends.get(state.backend_url)
@@ -153,46 +142,90 @@ class MultiBackendRouter:
             state.status = ProgramStatus.REASONING
             return True
         
-        # On first request, estimate total_tokens
-        is_first_request = state.step_count == 1
-        if is_first_request:
+        is_new_program = state.step_count == 1
+        
+        # On first request, estimate total_tokens and add to total tracking
+        if is_new_program:
             state.total_tokens = state.context_len // 5
-            # Add to total_program_tokens (always track)
             backend.add_total_program(state.total_tokens)
         
-        # Check capacity
-        if state.status == ProgramStatus.PAUSED:
-            # Already paused, need to wait for resume
-            await self._wait_for_resume(program_id, state)
-        elif is_first_request:
-            # New program: check if capacity is blocked or no capacity
-            if backend.capacity_blocked or not backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
-                # No capacity or blocked: pause this program and wait
-                self._pause_program(program_id, state)
-                await self._wait_for_resume(program_id, state)
-            else:
-                # Has capacity: add to active
+        # ---------------------------------------------------------------------
+        # Default mode: pure proxy, no scheduling
+        # ---------------------------------------------------------------------
+        if not self.scheduling_enabled:
+            if is_new_program:
                 backend.add_active_program(state.total_tokens)
-                state.status = ProgramStatus.REASONING
+            state.status = ProgramStatus.REASONING
+            return True
+        
+        # ---------------------------------------------------------------------
+        # TR mode: full capacity-based scheduling
+        # ---------------------------------------------------------------------
+        should_pause = False
+        
+        # Check 1: If already paused, wait for resume
+        if state.status == ProgramStatus.PAUSED:
+            await self._wait_for_resume(program_id, state)
+            return True
+        
+        # Check 2: If marked for pause, pause now
+        if state.marked_for_pause:
+            logger.info(f"Program {program_id} was marked, pausing now")
+            self._clear_mark_and_pause(program_id, state)
+            await self._wait_for_resume(program_id, state)
+            return True
+        
+        # Check 3: New program fairness (must queue if others waiting)
+        has_waiting_programs = len(backend.paused_programs) > 0 or backend.future_paused_tokens > 0
+        if is_new_program and has_waiting_programs:
+            logger.info(f"New program {program_id} must wait (paused={len(backend.paused_programs)}, marked={backend.future_paused_tokens})")
+            self._pause_new_program(program_id, state, backend)
+            await self._wait_for_resume(program_id, state)
+            return True
+        
+        # Capacity enforcement (skipped if another scheduling in progress)
+        if not backend.scheduling_in_progress:
+            backend.scheduling_in_progress = True
+            try:
+                if backend.capacity_overflow(include_future_release=True) > 0:
+                    self._enforce_capacity(backend)
+                
+                # Final capacity check for new program
+                if is_new_program:
+                    if not backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
+                        self._pause_new_program(program_id, state, backend)
+                        should_pause = True
+            finally:
+                backend.scheduling_in_progress = False
+        
+        # Proceed to REASONING
+        if not should_pause:
+            if is_new_program:
+                backend.add_active_program(state.total_tokens)
+            state.status = ProgramStatus.REASONING
         else:
-            # Existing program coming back from ACTING
-            # Check if capacity is blocked - if so, pause and wait
-            if backend.capacity_blocked:
-                self._pause_program(program_id, state)
-                await self._wait_for_resume(program_id, state)
-            else:
-                # It's already counted in active, just set status
-                state.status = ProgramStatus.REASONING
+            await self._wait_for_resume(program_id, state)
         
         return True
+
+    def _pause_new_program(self, program_id: str, state: ProgramState, backend: BackendState) -> None:
+        """Pause a new program that hasn't been added to active yet."""
+        backend.paused_programs.add(program_id)
+        state.status = ProgramStatus.PAUSED
+        
+        if state.waiting_event is None:
+            state.waiting_event = asyncio.Event()
+        else:
+            state.waiting_event.clear()
+        
+        logger.info(f"New program {program_id} paused (tokens={state.total_tokens})")
 
     def update_program_after_request(self, program_id: str, state: ProgramState, total_tokens: int) -> None:
         """Update program state after receiving response from vLLM.
         
-        Sets status to ACTING (off GPU, executing tool).
-        Updates backend's tokens and checks capacity:
-        - If program was marked_for_pause: pause it immediately
-        - If over capacity: pause smallest ACTING programs, mark REASONING programs
+        Transitions to ACTING (off GPU, executing tool).
+        Updates token counts and enforces capacity if needed.
+        Uses non-blocking flag: skips enforcement if already in progress.
         """
         # Transition to ACTING
         state.status = ProgramStatus.ACTING
@@ -202,29 +235,26 @@ class MultiBackendRouter:
             state.total_tokens = total_tokens
             return
         
-        # Update tokens (both active and total)
+        # Update tokens (always performed)
         old_tokens = state.total_tokens
         state.total_tokens = total_tokens
         backend.update_program_tokens(old_tokens, total_tokens)
         
-        # Check if this program was marked for pause
-        if state.marked_for_pause:
-            logger.info(f"Program {program_id} was marked for pause, pausing now")
-            self._pause_program(program_id, state)
-            return
-        
-        # Check capacity after update
-        if backend.capacity_overflow() > 0:
-            # Over capacity: pause/mark programs
-            paused_count, marked_count = self._try_pause_overflowing(backend)
-            if paused_count > 0 or marked_count > 0:
-                logger.info(f"Capacity overflow: paused={paused_count}, marked={marked_count}")
+        # Capacity enforcement (skipped if already in progress)
+        if not backend.scheduling_in_progress:
+            backend.scheduling_in_progress = True
+            try:
+                if backend.capacity_overflow(include_future_release=True) > 0:
+                    self._enforce_capacity(backend)
+            finally:
+                backend.scheduling_in_progress = False
 
     def release_program(self, program_id: str) -> bool:
-        """Stop a program (keep in records with stopped status).
+        """Stop a program and release its resources.
         
-        Removes program's tokens from all tracking.
-        Tries to resume paused programs if capacity becomes available.
+        Removes tokens from tracking and tries to resume paused programs.
+        Resumes largest paused programs first.
+        Uses non-blocking flag: skips resume if scheduling already in progress.
         """
         if program_id not in self.programs:
             return False
@@ -233,31 +263,34 @@ class MultiBackendRouter:
         backend = self.backends.get(state.backend_url)
         
         if backend:
-            # Remove from active if was REASONING/ACTING
+            # Clean up based on current status (always performed)
             if state.status in (ProgramStatus.REASONING, ProgramStatus.ACTING):
                 backend.remove_active_program(state.total_tokens)
             elif state.status == ProgramStatus.PAUSED:
-                # Remove from paused set
                 backend.paused_programs.discard(program_id)
-                # Signal waiting event to unblock any waiters
                 if state.waiting_event:
                     state.waiting_event.set()
             
-            # Clear marked_for_pause flag
-            state.marked_for_pause = False
-            backend.marked_for_pause.discard(program_id)
+            # Clear mark if was marked
+            if state.marked_for_pause:
+                backend.future_paused_tokens -= state.total_tokens
+                if backend.future_paused_tokens < 0:
+                    backend.future_paused_tokens = 0
+                state.marked_for_pause = False
             
-            # Always remove from total (unless already STOPPED)
+            # Remove from total tracking
             if state.status != ProgramStatus.STOPPED:
                 backend.remove_total_program(state.total_tokens)
             
-            # Try to unblock capacity
-            self._try_unblock_capacity(backend)
-            
-            # Try to resume paused programs
-            resumed_count = self._try_resume_paused(backend)
-            if resumed_count > 0:
-                logger.info(f"Resumed {resumed_count} paused programs after release")
+            # Resume paused programs (skipped if scheduling in progress)
+            if not backend.scheduling_in_progress:
+                backend.scheduling_in_progress = True
+                try:
+                    resumed = self._try_resume_paused(backend)
+                    if resumed > 0:
+                        logger.info(f"Resumed {resumed} paused programs after release")
+                finally:
+                    backend.scheduling_in_progress = False
         
         state.status = ProgramStatus.STOPPED
         logger.info(f"Released program: {program_id}")
@@ -274,24 +307,38 @@ class MultiBackendRouter:
     # Capacity-based Scheduling (pause/resume)
     # -------------------------------------------------------------------------
 
-    def _get_acting_programs_sorted(self, backend_url: str) -> List[Tuple[str, ProgramState]]:
-        """Get ACTING programs on a backend, sorted by total_tokens (smallest first)."""
+    def _get_acting_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, ProgramState]]:
+        """Get ACTING programs on a backend, sorted by total_tokens.
+        
+        Args:
+            ascending: If True, smallest first. If False, largest first.
+        """
         programs = [
             (pid, state) for pid, state in self.programs.items()
             if state.backend_url == backend_url and state.status == ProgramStatus.ACTING
         ]
-        return sorted(programs, key=lambda x: x[1].total_tokens)
+        return sorted(programs, key=lambda x: x[1].total_tokens, reverse=not ascending)
 
-    def _get_reasoning_programs_sorted(self, backend_url: str) -> List[Tuple[str, ProgramState]]:
-        """Get REASONING programs on a backend, sorted by total_tokens (smallest first)."""
+    def _get_reasoning_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, ProgramState]]:
+        """Get REASONING programs on a backend, sorted by total_tokens.
+        
+        Args:
+            ascending: If True, smallest first. If False, largest first.
+        """
         programs = [
             (pid, state) for pid, state in self.programs.items()
-            if state.backend_url == backend_url and state.status == ProgramStatus.REASONING
+            if state.backend_url == backend_url 
+            and state.status == ProgramStatus.REASONING
+            and not state.marked_for_pause  # Exclude already marked
         ]
-        return sorted(programs, key=lambda x: x[1].total_tokens)
+        return sorted(programs, key=lambda x: x[1].total_tokens, reverse=not ascending)
 
-    def _get_paused_programs_sorted(self, backend_url: str) -> List[Tuple[str, ProgramState]]:
-        """Get PAUSED programs on a backend, sorted by total_tokens (smallest first)."""
+    def _get_paused_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, ProgramState]]:
+        """Get PAUSED programs on a backend, sorted by total_tokens.
+        
+        Args:
+            ascending: If True, smallest first. If False, largest first.
+        """
         backend = self.backends.get(backend_url)
         if not backend:
             return []
@@ -299,25 +346,23 @@ class MultiBackendRouter:
             (pid, self.programs[pid]) for pid in backend.paused_programs
             if pid in self.programs
         ]
-        return sorted(programs, key=lambda x: x[1].total_tokens)
+        return sorted(programs, key=lambda x: x[1].total_tokens, reverse=not ascending)
 
     def _pause_program(self, program_id: str, state: ProgramState) -> None:
-        """Pause a program: remove from active, add to paused set."""
+        """Pause a program: remove from active, add to paused set.
+        
+        Only call this for ACTING programs. REASONING programs should be marked instead.
+        """
         backend = self.backends.get(state.backend_url)
         if not backend:
             return
         
-        # Remove from active counts (only if was active)
-        if state.status in (ProgramStatus.REASONING, ProgramStatus.ACTING):
-            backend.remove_active_program(state.total_tokens)
+        # Remove from active counts
+        backend.remove_active_program(state.total_tokens)
         
         # Add to paused set
         backend.paused_programs.add(program_id)
         state.status = ProgramStatus.PAUSED
-        
-        # Clear marked_for_pause flag (if was marked)
-        state.marked_for_pause = False
-        backend.marked_for_pause.discard(program_id)
         
         # Create waiting event if needed
         if state.waiting_event is None:
@@ -325,10 +370,42 @@ class MultiBackendRouter:
         else:
             state.waiting_event.clear()
         
-        logger.info(f"Paused program {program_id} (tokens={state.total_tokens}, active_tokens={backend.active_program_tokens})")
+        logger.info(f"Paused program {program_id} (tokens={state.total_tokens}, active={backend.active_program_tokens})")
+
+    def _mark_program_for_pause(self, program_id: str, state: ProgramState) -> None:
+        """Mark a REASONING program for pause. It will be paused on next request.
+        
+        Adds the program's tokens to future_paused_tokens for capacity calculation.
+        """
+        backend = self.backends.get(state.backend_url)
+        if not backend:
+            return
+        
+        state.marked_for_pause = True
+        backend.future_paused_tokens += state.total_tokens
+        
+        logger.info(f"Marked program {program_id} for pause (tokens={state.total_tokens}, future_paused={backend.future_paused_tokens})")
+
+    def _clear_mark_and_pause(self, program_id: str, state: ProgramState) -> None:
+        """Clear the mark from a program and pause it.
+        
+        Called when a marked program's next request arrives.
+        """
+        backend = self.backends.get(state.backend_url)
+        if not backend:
+            return
+        
+        # Clear the mark and subtract from future_paused_tokens
+        state.marked_for_pause = False
+        backend.future_paused_tokens -= state.total_tokens
+        if backend.future_paused_tokens < 0:
+            backend.future_paused_tokens = 0
+        
+        # Now actually pause the program
+        self._pause_program(program_id, state)
 
     def _resume_program(self, program_id: str, state: ProgramState) -> None:
-        """Resume a program: add to active, remove from paused set."""
+        """Resume a paused program: add to active, remove from paused set."""
         backend = self.backends.get(state.backend_url)
         if not backend:
             return
@@ -344,43 +421,19 @@ class MultiBackendRouter:
         if state.waiting_event:
             state.waiting_event.set()
         
-        logger.info(f"Resumed program {program_id} (tokens={state.total_tokens}, active_tokens={backend.active_program_tokens})")
+        logger.info(f"Resumed program {program_id} (tokens={state.total_tokens}, active={backend.active_program_tokens})")
 
-    def _try_resume_paused(self, backend: BackendState) -> int:
-        """Try to resume paused programs that fit within capacity.
+    def _enforce_capacity(self, backend: BackendState) -> Tuple[int, int]:
+        """Enforce capacity constraint by pausing ACTING and marking REASONING programs.
         
-        Returns: number of programs resumed
-        """
-        resumed = 0
-        paused_programs = self._get_paused_programs_sorted(backend.url)
-        
-        for program_id, state in paused_programs:
-            if backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
-                self._resume_program(program_id, state)
-                resumed += 1
-            else:
-                break  # Smallest doesn't fit, stop trying
-        
-        return resumed
-
-    def _mark_program_for_pause(self, program_id: str, state: ProgramState) -> None:
-        """Mark a REASONING program to be paused when it becomes ACTING."""
-        backend = self.backends.get(state.backend_url)
-        if not backend:
-            return
-        
-        state.marked_for_pause = True
-        backend.marked_for_pause.add(program_id)
-        logger.info(f"Marked program {program_id} for pause (tokens={state.total_tokens})")
-
-    def _try_pause_overflowing(self, backend: BackendState) -> Tuple[int, int]:
-        """Pause ACTING programs and mark REASONING programs until capacity is satisfied.
+        Overflow check: active_tokens - future_paused_tokens + buffer > total_tokens
         
         Algorithm:
-        1. First, pause all ACTING programs (smallest first) - immediate effect
-        2. If still over capacity, mark REASONING programs (smallest first)
-           - They will be paused when transitioning to ACTING
-        3. Set capacity_blocked = True to block new requests
+        1. Pause ACTING programs (smallest first) until no overflow
+        2. If still overflow (no more ACTING), mark REASONING programs (smallest first)
+        
+        Note: Respects pause cooldown to prevent rapid oscillation.
+              Marking REASONING programs is not subject to cooldown (deferred pause).
         
         Returns: (paused_count, marked_count)
         """
@@ -388,102 +441,70 @@ class MultiBackendRouter:
         marked = 0
         
         # Step 1: Pause ACTING programs (smallest first)
-        while backend.capacity_overflow() > 0:
-            acting_programs = self._get_acting_programs_sorted(backend.url)
+        # Respect cooldown: only pause if enough time has passed
+        while backend.capacity_overflow(include_future_release=True) > 0:
+            # Check cooldown before pausing
+            if paused > 0 and not backend.can_pause():
+                logger.debug("Pause cooldown active, deferring further pauses")
+                break
+            
+            acting_programs = self._get_acting_programs_sorted(backend.url, ascending=True)
             if not acting_programs:
-                break  # No more ACTING programs to pause
+                break  # No more ACTING programs, move to Step 2
             
             program_id, state = acting_programs[0]
             self._pause_program(program_id, state)
+            backend.record_pause()
             paused += 1
         
         # Step 2: Mark REASONING programs if still over capacity
-        while backend.capacity_overflow() > 0:
-            reasoning_programs = self._get_reasoning_programs_sorted(backend.url)
-            # Filter out already marked ones
-            reasoning_programs = [(pid, s) for pid, s in reasoning_programs if not s.marked_for_pause]
-            
+        # Marking is not subject to cooldown (actual pause will happen later)
+        while backend.capacity_overflow(include_future_release=True) > 0:
+            reasoning_programs = self._get_reasoning_programs_sorted(backend.url, ascending=True)
             if not reasoning_programs:
                 break  # No more REASONING programs to mark
             
             program_id, state = reasoning_programs[0]
             self._mark_program_for_pause(program_id, state)
             marked += 1
-            # Note: marked programs are still counted in active_tokens until they transition to ACTING
         
-        # Step 3: Set capacity_blocked if still over or have marked programs
-        if backend.capacity_overflow() > 0 or len(backend.marked_for_pause) > 0:
-            if not backend.capacity_blocked:
-                backend.capacity_blocked = True
-                backend.capacity_unblocked_event.clear()
-                logger.info(f"Backend {backend.url} capacity blocked (overflow={backend.capacity_overflow()}, marked={len(backend.marked_for_pause)})")
+        if paused > 0 or marked > 0:
+            logger.info(f"Capacity enforcement: paused={paused}, marked={marked}, "
+                       f"active={backend.active_program_tokens}, future_paused={backend.future_paused_tokens}")
         
         return paused, marked
-    
-    def _try_unblock_capacity(self, backend: BackendState) -> bool:
-        """Try to unblock capacity if conditions are met.
-        
-        Conditions for unblocking:
-        - No capacity overflow
-        - No programs marked for pause
-        
-        Returns: True if unblocked
-        """
-        if not backend.capacity_blocked:
-            return False
-        
-        if backend.capacity_overflow() <= 0 and len(backend.marked_for_pause) == 0:
-            backend.capacity_blocked = False
-            backend.capacity_unblocked_event.set()
-            logger.info(f"Backend {backend.url} capacity unblocked")
-            return True
-        
-        return False
 
-    async def _capacity_check_loop(self) -> None:
-        """Periodic capacity check loop (runs every CAPACITY_CHECK_INTERVAL seconds).
+    def _try_resume_paused(self, backend: BackendState) -> int:
+        """Resume paused programs that fit within capacity.
         
-        For each backend:
-        - If over capacity: pause ACTING programs, mark REASONING programs, block new requests
-        - If under capacity and no marked: unblock and try resume paused programs
+        Resumes largest programs first to prioritize completing big tasks.
+        Respects resume cooldown to prevent rapid oscillation.
+        
+        Returns: number of programs resumed
         """
-        logger.info(f"Capacity check loop started (interval={CAPACITY_CHECK_INTERVAL}s)")
+        resumed = 0
         
-        while True:
-            try:
-                await asyncio.sleep(CAPACITY_CHECK_INTERVAL)
-                
-                for backend in self.backends.values():
-                    if not backend.cache_config:
-                        continue  # No config, skip
-                    
-                    overflow = backend.capacity_overflow()
-                    
-                    if overflow > 0:
-                        # Over capacity: pause/mark
-                        paused, marked = self._try_pause_overflowing(backend)
-                        if paused > 0 or marked > 0:
-                            logger.info(f"Capacity check: paused={paused}, marked={marked}, overflow={overflow}")
-                    else:
-                        # Under capacity: try to unblock and resume
-                        self._try_unblock_capacity(backend)
-                        
-                        # Try to resume paused programs if not blocked
-                        if not backend.capacity_blocked:
-                            resumed = self._try_resume_paused(backend)
-                            if resumed > 0:
-                                logger.info(f"Capacity check: resumed {resumed} paused programs")
-                                
-            except asyncio.CancelledError:
-                logger.info("Capacity check loop cancelled")
-                break
-            except Exception as e:
-                logger.error(f"Capacity check loop error: {e}")
+        # Check cooldown before any resume
+        if not backend.can_resume():
+            logger.debug("Resume cooldown active, deferring resume")
+            return 0
+        
+        # Get paused programs sorted by tokens (largest first)
+        paused_programs = self._get_paused_programs_sorted(backend.url, ascending=False)
+        
+        for program_id, state in paused_programs:
+            if backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
+                self._resume_program(program_id, state)
+                backend.record_resume()
+                resumed += 1
+            # Continue checking smaller programs even if this one doesn't fit
+        
+        return resumed
 
     async def _wait_for_resume(self, program_id: str, state: ProgramState, timeout: float = 1800.0) -> None:
         """Wait for a paused program to be resumed.
         
-        If timeout (20 min), force resume the program regardless of capacity.
+        If timeout (30 min), force resume the program regardless of capacity.
         """
         if state.waiting_event is None:
             return
@@ -492,7 +513,6 @@ class MultiBackendRouter:
             await asyncio.wait_for(state.waiting_event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             logger.warning(f"Program {program_id} wait timeout after {timeout}s, forcing resume")
-            # Force resume: add back to active (even if over capacity)
             self._resume_program(program_id, state)
 
     def get_program_stats(self) -> Dict[str, Any]:
@@ -511,8 +531,8 @@ class MultiBackendRouter:
                 "reasoning": sum(1 for p in progs.values() if p.status == ProgramStatus.REASONING),
                 "acting": sum(1 for p in progs.values() if p.status == ProgramStatus.ACTING),
                 "paused": sum(1 for p in progs.values() if p.status == ProgramStatus.PAUSED),
-                "marked_for_pause": len(backend.marked_for_pause),
-                "capacity_blocked": backend.capacity_blocked,
+                "marked_for_pause": sum(1 for p in progs.values() if p.marked_for_pause),
+                "future_paused_tokens": backend.future_paused_tokens,
             }
         
         return {

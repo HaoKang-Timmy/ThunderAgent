@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 def _create_router() -> MultiBackendRouter:
     """Create router with current config."""
     config = get_config()
-    return MultiBackendRouter(config.backends, profile_enabled=config.profile_enabled)
+    return MultiBackendRouter(
+        config.backends, 
+        profile_enabled=config.profile_enabled,
+        scheduling_enabled=(config.router_mode == "tr"),
+    )
 
 router = _create_router()
 app = FastAPI(title="ThunderReact - Program State Tracking Proxy")
@@ -125,9 +129,12 @@ async def release_program(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    config = get_config()
     stats = router.get_program_stats()
     return JSONResponse({
         "status": "ok",
+        "router_mode": config.router_mode,
+        "scheduling_enabled": router.scheduling_enabled,
         "backends": list(router.backends.keys()),
         "programs_count": stats["total"],
         "reasoning_count": stats["reasoning"],

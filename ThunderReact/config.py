@@ -9,6 +9,9 @@ class Config:
     # Backend configuration
     backends: List[str] = field(default_factory=lambda: ["http://localhost:8000"])
     
+    # Router mode: "default" (pure proxy) or "tr" (capacity scheduling)
+    router_mode: str = "tr"
+    
     # Profile configuration
     profile_enabled: bool = False
     profile_dir: str = "/tmp/thunderreact_profiles"

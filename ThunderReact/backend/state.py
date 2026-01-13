@@ -1,6 +1,7 @@
 """Backend state management."""
 import asyncio
 import logging
+import time
 from typing import List, Optional, Set, TYPE_CHECKING
 
 import httpx
@@ -17,6 +18,10 @@ METRICS_HISTORY_SIZE = 12
 
 # Buffer tokens reserved per program for decode phase
 DECODE_BUFFER = 1024
+
+# Cooldown period (seconds) to prevent frequent pause/resume oscillation
+PAUSE_COOLDOWN = 5.0    # Wait after pausing before pausing more
+RESUME_COOLDOWN = 5.0   # Wait after resuming before resuming more
 
 
 class BackendState:
@@ -38,15 +43,16 @@ class BackendState:
         # Paused programs waiting to be resumed
         self.paused_programs: Set[str] = set()  # program_id set
         
-        # Programs marked to be paused when they transition REASONING -> ACTING
-        self.marked_for_pause: Set[str] = set()  # program_id set
+        # Future paused tokens: sum of tokens from REASONING programs marked for pause
+        # These will be released when they transition to ACTING
+        self.future_paused_tokens: int = 0
         
-        # Capacity blocked flag: when True, all new requests must wait
-        self.capacity_blocked: bool = False
-        self.capacity_unblocked_event: asyncio.Event = asyncio.Event()
+        # Cooldown timestamps to prevent rapid pause/resume oscillation
+        self.last_pause_time: float = 0.0   # Last time a program was paused
+        self.last_resume_time: float = 0.0  # Last time a program was resumed
         
-        # Capacity check task
-        self._capacity_check_task: Optional[asyncio.Task] = None
+        # Flag to skip concurrent scheduling (non-blocking, allows temporary overflow)
+        self.scheduling_in_progress: bool = False
         
         # Metrics monitoring (self-managed)
         self._monitor_task: Optional[asyncio.Task] = None
@@ -92,13 +98,40 @@ class BackendState:
         required = tokens + count * DECODE_BUFFER
         return required <= self.cache_config.total_tokens_capacity
     
-    def capacity_overflow(self) -> int:
-        """Return how many tokens we're over capacity (0 if within capacity)."""
+    def capacity_overflow(self, include_future_release: bool = False) -> int:
+        """Return how many tokens we're over capacity (0 if within capacity).
+        
+        Args:
+            include_future_release: If True, subtract future_paused_tokens from the calculation.
+                                   Use this when checking if more programs need to be paused.
+        """
         if not self.cache_config:
             return 0
         required = self.active_program_tokens + self.active_program_count * DECODE_BUFFER
+        if include_future_release:
+            required -= self.future_paused_tokens
         overflow = required - self.cache_config.total_tokens_capacity
         return max(0, overflow)
+    
+    # -------------------------------------------------------------------------
+    # Cooldown Management
+    # -------------------------------------------------------------------------
+    
+    def can_pause(self) -> bool:
+        """Check if enough time has passed since last pause operation."""
+        return time.time() - self.last_pause_time >= PAUSE_COOLDOWN
+    
+    def can_resume(self) -> bool:
+        """Check if enough time has passed since last resume operation."""
+        return time.time() - self.last_resume_time >= RESUME_COOLDOWN
+    
+    def record_pause(self) -> None:
+        """Record that a pause operation just happened."""
+        self.last_pause_time = time.time()
+    
+    def record_resume(self) -> None:
+        """Record that a resume operation just happened."""
+        self.last_resume_time = time.time()
     
     # -------------------------------------------------------------------------
     # Program Token Management
@@ -257,8 +290,7 @@ class BackendState:
             "active_program_tokens_ratio": round(self.active_program_tokens_ratio, 4),
             "total_program_tokens": self.total_program_tokens,
             "paused_program_count": len(self.paused_programs),
-            "marked_for_pause_count": len(self.marked_for_pause),
-            "capacity_blocked": self.capacity_blocked,
+            "future_paused_tokens": self.future_paused_tokens,
             "decode_buffer": DECODE_BUFFER,
             "capacity_overflow": self.capacity_overflow(),
         }
