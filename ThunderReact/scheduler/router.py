@@ -226,7 +226,12 @@ class MultiBackendRouter:
             try:
                 if backend.capacity_overflow(include_future_release=True) > 0:
                     self._enforce_capacity(backend)
-                
+
+                # If this program got paused during capacity enforcement, do not proceed.
+                # This can happen for existing programs (step_count > 1) that were still ACTING when scheduled.
+                if state.status == ProgramStatus.PAUSED and state.waiting_event is not None:
+                    should_pause = True
+                    
                 # Final capacity check for new program
                 if is_new_program:
                     if not backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
@@ -234,6 +239,7 @@ class MultiBackendRouter:
                         should_pause = True
             finally:
                 backend.scheduling_in_progress = False
+
         
         # Proceed to REASONING
         if not should_pause:
@@ -520,14 +526,14 @@ class MultiBackendRouter:
             marked += 1
 
         # Step 3：After actual pauses, try to backfill with small paused programs to reduce slack.
-        if paused > 0:
+        """if paused > 0:
             resumed = self._try_resume_paused(backend)
             if resumed > 0:
                 logger.info(f"Resumed {resumed} paused programs after capacity enforcement")
         
         if paused > 0 or marked > 0:
             logger.info(f"Capacity enforcement: paused={paused}, marked={marked}, "
-                       f"active={backend.active_program_tokens}, future_paused={backend.future_paused_tokens}")
+                       f"active={backend.active_program_tokens}, future_paused={backend.future_paused_tokens}")"""
         
         return paused, marked, resumed
 
