@@ -169,16 +169,13 @@ class MultiBackendRouter:
         if not backend:
             state.status = ProgramStatus.REASONING
             return True
-
-        if state.status == ProgramStatus.ACTING:
-            backend.shift_tokens_to_reasoning(state.total_tokens)
         
         is_new_program = state.step_count == 1
 
         if is_new_program and BackendState.shared_token is None:
             shared_tokens = self._estimate_system_prompt_tokens(payload)
             BackendState.shared_token = shared_tokens
-            logger.info(f"Set SHARED_TOKEN={shared_tokens} from first request system prompt")
+            logger.info(f"Set BackendState.shared_token={shared_tokens} from first request system prompt")
         
         # On first request, estimate total_tokens and add to total tracking
         if is_new_program:
@@ -189,6 +186,8 @@ class MultiBackendRouter:
         # Default mode: pure proxy, no scheduling
         # ---------------------------------------------------------------------
         if not self.scheduling_enabled:
+            if state.status == ProgramStatus.ACTING:
+                backend.shift_tokens_to_reasoning(state.total_tokens)
             if is_new_program:
                 backend.add_active_program(state.total_tokens, is_acting=False)
             state.status = ProgramStatus.REASONING
@@ -211,7 +210,7 @@ class MultiBackendRouter:
             self._clear_mark_and_pause(program_id, state)
             await self._wait_for_resume(program_id, state)
             return True
-        
+
         # Check 3: New program fairness (must queue if others waiting)
         has_waiting_programs = len(backend.paused_programs) > 0 or backend.future_paused_tokens > 0
         if is_new_program and has_waiting_programs:
@@ -219,6 +218,7 @@ class MultiBackendRouter:
             self._pause_new_program(program_id, state, backend)
             await self._wait_for_resume(program_id, state)
             return True
+            
         
         # Capacity enforcement (skipped if another scheduling in progress)
         if not backend.scheduling_in_progress:
@@ -239,6 +239,8 @@ class MultiBackendRouter:
         if not should_pause:
             if is_new_program:
                 backend.add_active_program(state.total_tokens, is_acting=False)
+            if state.status == ProgramStatus.ACTING:
+                backend.shift_tokens_to_reasoning(state.total_tokens)
             state.status = ProgramStatus.REASONING
         else:
             await self._wait_for_resume(program_id, state)
@@ -402,7 +404,10 @@ class MultiBackendRouter:
             return
         
         # Remove from active counts
-        backend.remove_active_program(state.total_tokens, is_acting=True)
+        backend.remove_active_program(
+            state.total_tokens,
+            is_acting=(state.status == ProgramStatus.ACTING),
+        )
         
         # Add to paused set
         backend.paused_programs.add(program_id)
