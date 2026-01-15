@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import time
-from typing import List, Optional, Set, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 import httpx
 
@@ -45,9 +45,6 @@ class BackendState:
         self.active_program_tokens: int = 0  # REASONING + TOOL_COEFFICIENT * ACTING
         self.active_program_count: int = 0    # Number of REASONING + ACTING programs
         self.total_program_tokens: int = 0    # All non-STOPPED programs (including PAUSED)
-        
-        # Paused programs waiting to be resumed
-        self.paused_programs: Set[str] = set()  # program_id set
         
         # Future paused tokens: sum of tokens from REASONING programs marked for pause
         # These will be released when they transition to ACTING
@@ -331,8 +328,10 @@ class BackendState:
             self.healthy = False
             return False
     
-    def to_dict(self) -> dict:
+    def to_dict(self, *, paused_program_count: Optional[int] = None) -> dict:
         """Convert to dict for API response."""
+        if paused_program_count is None:
+            paused_program_count = 0
         result = {
             "url": self.url,
             "healthy": self.healthy,
@@ -343,7 +342,7 @@ class BackendState:
             "active_program_count": self.active_program_count,
             "active_program_tokens_ratio": round(self.active_program_tokens_ratio, 4),
             "total_program_tokens": self.total_program_tokens,
-            "paused_program_count": len(self.paused_programs),
+            "paused_program_count": paused_program_count,
             "future_paused_tokens": self.future_paused_tokens,
             "shared_token": BackendState.shared_token,
             "decode_buffer": DECODE_BUFFER,

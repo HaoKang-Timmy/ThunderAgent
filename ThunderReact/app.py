@@ -60,7 +60,6 @@ async def chat_completions(request: Request):
     # Get or create program state (auto-assigns to least loaded backend)
     program_id = get_program_id(payload)
     program_state = router.get_or_create_program(program_id)
-    backend = router.get_backend_for_program(program_id)
 
     # Profile: record request arrival BEFORE pause check (for accurate tool_call_time)
     if program_state.profile:
@@ -73,14 +72,17 @@ async def chat_completions(request: Request):
     if program_state.profile:
         program_state.profile.on_request_start()
 
+    # Resolve backend after any pause/resume to honor migrations.
+    backend = router.get_backend_for_program(program_id)
+
     # Callback to update state after response
     async def on_usage(total_tokens: int, prompt_tokens: int, cached_tokens: int) -> None:
-        router.update_program_after_request(program_id, program_state, total_tokens)
+        await router.update_program_after_request(program_id, program_state, total_tokens)
         # Profile: record request end with KV cache info
         if program_state.profile:
             program_state.profile.on_request_end(prompt_tokens, cached_tokens)
 
-    # Forward to vLLM (sticky routing - same program always goes to same backend)
+    # Forward to vLLM (sticky unless rescheduled from the global paused pool)
     # Pass profile callbacks for token timing
     return await router.proxy_request(
         backend, payload,
@@ -122,7 +124,7 @@ async def release_program(request: Request):
         raise HTTPException(status_code=400, detail="Missing program_id")
     program_id = str(program_id)
 
-    released = router.release_program(program_id)
+    released = await router.release_program(program_id)
     return JSONResponse({"program_id": program_id, "released": released})
 
 
@@ -183,10 +185,14 @@ async def list_models():
 async def get_metrics():
     """Get vLLM metrics from all backends."""
     config = get_config()
+    paused_counts = router.get_paused_counts_by_backend()
     return JSONResponse({
         "metrics_enabled": config.metrics_enabled,
         "metrics_interval": config.metrics_interval if config.metrics_enabled else None,
-        "backends": {url: backend.to_dict() for url, backend in router.backends.items()},
+        "backends": {
+            url: backend.to_dict(paused_program_count=paused_counts.get(url, 0))
+            for url, backend in router.backends.items()
+        },
     })
 
 
