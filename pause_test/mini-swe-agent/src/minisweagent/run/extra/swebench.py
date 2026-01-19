@@ -228,7 +228,7 @@ def release_router_program(job_id: str) -> None:
 
     url = f"{router_admin_url.rstrip('/')}/programs/release"
     try:
-        resp = requests.post(url, json={"job_id": str(job_id)}, timeout=2.0)
+        resp = requests.post(url, json={"job_id": str(job_id), "program_id": str(job_id)}, timeout=2.0)
         if resp.status_code >= 400:  # pragma: no cover - best-effort
             body = (resp.text or "").strip().replace("\n", " ")
             logger.warning(f"Router release failed for job_id={job_id}: HTTP {resp.status_code} {body[:200]}")
