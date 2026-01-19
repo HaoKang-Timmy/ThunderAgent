@@ -50,6 +50,7 @@ DATASET_MAPPING = {
 
 
 _OUTPUT_FILE_LOCK = threading.Lock()
+_ROLLOUTS_FILE_LOCK = threading.Lock()
 
 
 class ProgressTrackingAgent(DefaultAgent):
@@ -121,6 +122,69 @@ def remove_from_preds_file(output_path: Path, instance_id: str):
             output_path.write_text(json.dumps(output_data, indent=2))
 
 
+def _load_rollouts_file(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def update_rollouts_file(
+    output_path: Path,
+    instance_id: str,
+    rollout_idx: int,
+    model_name: str,
+    result: str,
+    *,
+    task_id: str,
+    exit_status: str,
+) -> None:
+    """Append/overwrite a rollout result for an instance."""
+    with _ROLLOUTS_FILE_LOCK:
+        output_data: dict = _load_rollouts_file(output_path)
+        entries = output_data.get(instance_id, [])
+        if not isinstance(entries, list):
+            entries = []
+
+        new_entry = {
+            "rollout_idx": int(rollout_idx),
+            "task_id": task_id,
+            "model_name_or_path": model_name,
+            "model_patch": result,
+            "exit_status": exit_status,
+        }
+
+        replaced = False
+        for i, entry in enumerate(entries):
+            if isinstance(entry, dict) and entry.get("rollout_idx") == rollout_idx:
+                entries[i] = new_entry
+                replaced = True
+                break
+        if not replaced:
+            entries.append(new_entry)
+
+        entries.sort(key=lambda e: int(e.get("rollout_idx", 0)) if isinstance(e, dict) else 0)
+        output_data[instance_id] = entries
+        output_path.write_text(json.dumps(output_data, indent=2))
+
+
+def get_completed_rollouts(output_path: Path, instance_id: str) -> set[int]:
+    output_data = _load_rollouts_file(output_path)
+    entries = output_data.get(instance_id, [])
+    completed: set[int] = set()
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                completed.add(int(entry.get("rollout_idx")))
+            except Exception:
+                continue
+    return completed
+
+
 def release_router_program(job_id: str) -> None:
     """Best-effort: ask router to drop any per-program state for this job_id.
 
@@ -152,14 +216,25 @@ def process_instance(
     config: dict,
     progress_manager: RunBatchProgressManager,
     instance_number: int = 0,
+    rollout_idx: int = 1,
+    rollouts_per_instance: int = 1,
     cleanup_images: bool = False,
 ) -> None:
     """Process a single SWEBench instance."""
     instance_id = instance["instance_id"]
+    task_id = instance_id if rollouts_per_instance <= 1 else f"{instance_id}#r{rollout_idx:02d}"
     instance_dir = output_dir / instance_id
+    rollout_dir = (
+        instance_dir
+        if rollouts_per_instance <= 1
+        else (instance_dir / "rollouts" / f"r{rollout_idx:02d}")
+    )
     # avoid inconsistent state if something here fails and there's leftover previous files
-    remove_from_preds_file(output_dir / "preds.json", instance_id)
-    (instance_dir / f"{instance_id}.traj.json").unlink(missing_ok=True)
+    if rollouts_per_instance <= 1:
+        remove_from_preds_file(output_dir / "preds.json", instance_id)
+        (instance_dir / f"{instance_id}.traj.json").unlink(missing_ok=True)
+    else:
+        (rollout_dir / f"{instance_id}.traj.json").unlink(missing_ok=True)
 
     # For vLLM models, pass job_id and step_limit
     model_config = config.get("model", {}).copy()
@@ -171,8 +246,8 @@ def process_instance(
     model = get_model(config=model_config)
     task = instance["problem_statement"]
 
-    progress_manager.on_instance_start(instance_id)
-    progress_manager.update_instance_status(instance_id, "Pulling/starting docker")
+    progress_manager.on_instance_start(task_id)
+    progress_manager.update_instance_status(task_id, "Pulling/starting docker")
 
     agent = None
     extra_info = None
@@ -196,7 +271,7 @@ def process_instance(
             model,
             env,
             progress_manager=progress_manager,
-            instance_id=instance_id,
+            instance_id=task_id,
             **config.get("agent", {}),
         )
         exit_status, result = agent.run(task)
@@ -207,10 +282,13 @@ def process_instance(
     finally:
         # Persist timing metrics for this instance (best-effort).
         try:
-            instance_dir.mkdir(parents=True, exist_ok=True)
-            timing_path = instance_dir / f"{instance_id}.timings.json"
+            rollout_dir.mkdir(parents=True, exist_ok=True)
+            timing_path = rollout_dir / f"{instance_id}.timings.json"
             timing_payload = {
                 "instance_id": instance_id,
+                "task_id": task_id,
+                "rollout_idx": rollout_idx,
+                "rollouts_per_instance": rollouts_per_instance,
                 "env_prepare": env_prepare_timing,
                 "steps": getattr(agent, "step_timings", []) if agent is not None else [],
             }
@@ -220,14 +298,25 @@ def process_instance(
 
         save_traj(
             agent,
-            instance_dir / f"{instance_id}.traj.json",
+            rollout_dir / f"{instance_id}.traj.json",
             exit_status=exit_status,
             result=result,
             extra_info=extra_info,
             instance_id=instance_id,
             print_fct=logger.info,
         )
-        update_preds_file(output_dir / "preds.json", instance_id, model.config.model_name, result)
+        if rollouts_per_instance <= 1:
+            update_preds_file(output_dir / "preds.json", instance_id, model.config.model_name, result)
+        else:
+            update_rollouts_file(
+                output_dir / "preds_rollouts.json",
+                instance_id,
+                rollout_idx,
+                model.config.model_name,
+                result,
+                task_id=task_id,
+                exit_status=exit_status,
+            )
         if env and hasattr(env, "cleanup"):
             try:
                 env.cleanup()
@@ -276,7 +365,7 @@ def process_instance(
                         logger.warning(f"Failed to remove dangling image {image_id} (code {result.returncode})")
             except Exception as cleanup_error:  # pragma: no cover - best-effort cleanup
                 logger.warning(f"Error removing image {image_name}: {cleanup_error}")
-        progress_manager.on_instance_end(instance_id, exit_status)
+        progress_manager.on_instance_end(task_id, exit_status)
         if is_vllm_model:
             release_router_program(str(instance_number))
 
@@ -317,6 +406,7 @@ def main(
     config_spec: Path = typer.Option( builtin_config_dir / "extra" / "swebench.yaml", "-c", "--config", help="Path to a config file", rich_help_panel="Basic"),
     environment_class: str | None = typer.Option( None, "--environment-class", help="Environment type to use. Recommended are docker or singularity", rich_help_panel="Advanced"),
     cleanup_images: bool = typer.Option( False, "--cleanup-images", help="Remove SWEBench docker image after each instance", rich_help_panel="Advanced"),
+    rollouts_per_instance: int = typer.Option(1, "--rollouts-per-instance", help="Repeat each instance up to N times (rollouts)", rich_help_panel="Data selection"),
 ) -> None:
     # fmt: on
     output_path = Path(output)
@@ -329,11 +419,43 @@ def main(
     instances = list(load_dataset(dataset_path, split=split))
 
     instances = filter_instances(instances, filter_spec=filter_spec, slice_spec=slice_spec, shuffle=shuffle)
-    if not redo_existing and (output_path / "preds.json").exists():
-        existing_instances = list(json.loads((output_path / "preds.json").read_text()).keys())
+    rollouts_path = output_path / "preds_rollouts.json"
+    single_preds_path = output_path / "preds.json"
+    if not redo_existing and rollouts_per_instance <= 1 and single_preds_path.exists():
+        existing_instances = list(json.loads(single_preds_path.read_text()).keys())
         logger.info(f"Skipping {len(existing_instances)} existing instances")
         instances = [instance for instance in instances if instance["instance_id"] not in existing_instances]
-    logger.info(f"Running on {len(instances)} instances...")
+
+    tasks: list[tuple[dict, int]] = []
+    tasks_by_round: list[list[tuple[dict, int]]] = []
+    if rollouts_per_instance <= 1:
+        tasks = [(instance, 1) for instance in instances]
+    else:
+        max_rollouts = max(1, rollouts_per_instance)
+        remaining_by_instance: dict[str, set[int]] = {}
+        for instance in instances:
+            instance_id = instance["instance_id"]
+            completed = set() if redo_existing else get_completed_rollouts(rollouts_path, instance_id)
+            remaining = {r for r in range(1, max_rollouts + 1) if redo_existing or r not in completed}
+            if remaining:
+                remaining_by_instance[instance_id] = remaining
+
+        # Ordered pool scheduling: enqueue rollout 1 for all instances first, then
+        # rollout 2, etc. (no barrier between rounds).
+        for rollout_idx in range(1, max_rollouts + 1):
+            round_tasks: list[tuple[dict, int]] = []
+            for instance in instances:
+                instance_id = instance["instance_id"]
+                if rollout_idx in remaining_by_instance.get(instance_id, set()):
+                    round_tasks.append((instance, rollout_idx))
+            if round_tasks:
+                tasks_by_round.append(round_tasks)
+
+        tasks = [t for round_tasks in tasks_by_round for t in round_tasks]
+
+    logger.info(
+        f"Running {len(tasks)} tasks ({len(instances)} instances, up to {rollouts_per_instance} rollouts/instance)..."
+    )
 
     config_path = get_config_path(config_spec)
     logger.info(f"Loading agent config from '{config_path}'")
@@ -345,7 +467,7 @@ def main(
     if model_class is not None:
         config.setdefault("model", {})["model_class"] = model_class
 
-    progress_manager = RunBatchProgressManager(len(instances), output_path / f"exit_statuses_{time.time()}.yaml")
+    progress_manager = RunBatchProgressManager(len(tasks), output_path / f"exit_statuses_{time.time()}.yaml")
 
     def process_futures(futures: dict[concurrent.futures.Future, str]):
         for future in concurrent.futures.as_completed(futures):
@@ -360,20 +482,46 @@ def main(
 
     with Live(progress_manager.render_group, refresh_per_second=4):
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(
-                    process_instance, instance, output_path, config, progress_manager, idx + 1, cleanup_images
-                ): instance["instance_id"]
-                for idx, instance in enumerate(instances)
-            }
-            try:
-                process_futures(futures)
-            except KeyboardInterrupt:
-                logger.info("Cancelling all pending jobs. Press ^C again to exit immediately.")
-                for future in futures:
-                    if not future.running() and not future.done():
-                        future.cancel()
-                process_futures(futures)
+            task_counter = 0
+
+            def submit_task(instance: dict, rollout_idx: int) -> tuple[concurrent.futures.Future, str]:
+                nonlocal task_counter
+                task_counter += 1
+                instance_id = instance["instance_id"]
+                task_id = instance_id if rollouts_per_instance <= 1 else f"{instance_id}#r{rollout_idx:02d}"
+                future = executor.submit(
+                    process_instance,
+                    instance,
+                    output_path,
+                    config,
+                    progress_manager,
+                    task_counter,
+                    rollout_idx,
+                    rollouts_per_instance,
+                    cleanup_images,
+                )
+                return future, task_id
+
+            if rollouts_per_instance <= 1:
+                futures = dict(submit_task(instance, rollout_idx) for instance, rollout_idx in tasks)
+                try:
+                    process_futures(futures)
+                except KeyboardInterrupt:
+                    logger.info("Cancelling all pending jobs. Press ^C again to exit immediately.")
+                    for future in futures:
+                        if not future.running() and not future.done():
+                            future.cancel()
+                    process_futures(futures)
+            else:
+                futures = dict(submit_task(instance, rollout_idx) for instance, rollout_idx in tasks)
+                try:
+                    process_futures(futures)
+                except KeyboardInterrupt:
+                    logger.info("Cancelling all pending jobs. Press ^C again to exit immediately.")
+                    for future in futures:
+                        if not future.running() and not future.done():
+                            future.cancel()
+                    process_futures(futures)
 
 
 if __name__ == "__main__":
