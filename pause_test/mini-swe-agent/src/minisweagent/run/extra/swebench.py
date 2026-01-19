@@ -56,17 +56,43 @@ _ROLLOUTS_FILE_LOCK = threading.Lock()
 class ProgressTrackingAgent(DefaultAgent):
     """Simple wrapper around DefaultAgent that provides progress updates."""
 
-    def __init__(self, *args, progress_manager: RunBatchProgressManager, instance_id: str = "", **kwargs):
+    def __init__(
+        self,
+        *args,
+        progress_manager: RunBatchProgressManager,
+        instance_id: str = "",
+        checkpoint_path: Path | None = None,
+        checkpoint_interval_steps: int = 0,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.progress_manager: RunBatchProgressManager = progress_manager
         self.instance_id = instance_id
+        self._checkpoint_path = checkpoint_path
+        self._checkpoint_interval_steps = max(0, int(checkpoint_interval_steps))
+        self._last_checkpoint_step = 0
 
     def step(self) -> dict:
         """Override step to provide progress updates."""
         self.progress_manager.update_instance_status(
             self.instance_id, f"Step {self.model.n_calls + 1:3d} (${self.model.cost:.2f})"
         )
-        return super().step()
+        response = super().step()
+
+        if self._checkpoint_path is not None and self._checkpoint_interval_steps > 0:
+            step_idx = int(self.model.n_calls)
+            if step_idx - self._last_checkpoint_step >= self._checkpoint_interval_steps:
+                save_traj(
+                    self,
+                    self._checkpoint_path,
+                    print_path=False,
+                    exit_status="running",
+                    result=None,
+                    instance_id=self.instance_id,
+                )
+                self._last_checkpoint_step = step_idx
+
+        return response
 
 
 def get_swebench_docker_image_name(instance: dict) -> str:
@@ -218,6 +244,7 @@ def process_instance(
     instance_number: int = 0,
     rollout_idx: int = 1,
     rollouts_per_instance: int = 1,
+    checkpoint_interval_steps: int = 0,
     cleanup_images: bool = False,
 ) -> None:
     """Process a single SWEBench instance."""
@@ -272,6 +299,8 @@ def process_instance(
             env,
             progress_manager=progress_manager,
             instance_id=task_id,
+            checkpoint_path=rollout_dir / f"{instance_id}.traj.json",
+            checkpoint_interval_steps=checkpoint_interval_steps,
             **config.get("agent", {}),
         )
         exit_status, result = agent.run(task)
@@ -407,6 +436,7 @@ def main(
     environment_class: str | None = typer.Option( None, "--environment-class", help="Environment type to use. Recommended are docker or singularity", rich_help_panel="Advanced"),
     cleanup_images: bool = typer.Option( False, "--cleanup-images", help="Remove SWEBench docker image after each instance", rich_help_panel="Advanced"),
     rollouts_per_instance: int = typer.Option(1, "--rollouts-per-instance", help="Repeat each instance up to N times (rollouts)", rich_help_panel="Data selection"),
+    checkpoint_interval_steps: int = typer.Option(0, "--checkpoint-interval-steps", help="Save trajectory every N steps (0 disables)", rich_help_panel="Advanced"),
 ) -> None:
     # fmt: on
     output_path = Path(output)
@@ -498,6 +528,7 @@ def main(
                     task_counter,
                     rollout_idx,
                     rollouts_per_instance,
+                    checkpoint_interval_steps,
                     cleanup_images,
                 )
                 return future, task_id
