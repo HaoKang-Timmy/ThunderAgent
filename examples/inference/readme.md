@@ -5,10 +5,10 @@
 - [uv](https://docs.astral.sh/uv/) package manager
 - GPU(s) with appropriate CUDA drivers
 
-## 1. Intro
+## Intro
 Run the official [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) on SWE-Bench while routing model traffic through ThunderAgent to manage vLLM capacity and per-task program tracking.
 
-## 2. Software Setup (uv)
+## Setup
 ```bash
 # Create and activate env
 uv venv --python 3.12
@@ -20,7 +20,7 @@ uv pip install -e examples/inference/mini-swe-agent
 uv pip install datasets
 ```
 
-### How to run the experiment(One node example)
+## How to run the experiment(One node example)
 1) Start vLLM to serve the model:
 ```bash
 vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --port <VLLM_PORT>
@@ -29,18 +29,42 @@ vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-cho
 ```bash
 python -m ThunderAgent --backends http://localhost:<VLLM_PORT> --port <TA_PORT>
 ```
-3) Run SWE-Bench via mini-swe-agent through ThunderAgent:
+3) Configure mini-swe-agent to call ThunderAgent:
+
+- Edit `examples/inference/mini-swe-agent/src/minisweagent/config/benchmarks/swebench.yaml`
+- Set `model.model_kwargs.api_base` to `http://localhost:<TA_PORT>/v1`
+
+4) Run SWE-Bench via mini-swe-agent through ThunderAgent:
 ```bash
 mini-extra swebench \
+  -c swebench.yaml \
   --subset lite \
   --split test \
   --workers 128 \
   --output ./swebench_output 
 ```
 
-## 3. What we changed (to reuse in your own setup)
-- **Per-task program_id injection:** Each SWE-Bench instance gets a unique `program_id` (in `swebench.py`), automatically sent via `model_kwargs.extra_body` so ThunderAgent can track capacity per task.
-- **Program release hook:** After each instance finishes, `swebench.py` calls `/programs/release` on the same `api_base` to free ThunderAgent resources.
--  **Tool resource release:**
+## What we changed (to reuse in your own setup)
+- **Program ID injection (one ThunderAgent program per SWE-bench instance)**  
+  Location: `examples/inference/mini-swe-agent/src/minisweagent/run/benchmarks/swebench.py` in `process_instance()`.  
+  What: Generate a unique `program_id` per instance and inject it into `model_kwargs.extra_body.program_id` before creating the model.  
+  Why: `LitellmModel` forwards `model_kwargs` to `litellm.completion(...)`, and ThunderAgent extracts `program_id` from either `payload["program_id"]` or `payload["extra_body"]["program_id"]` (see `ThunderAgent/app.py:get_program_id()`), so each instance gets an isolated ProgramState.
+  ```python
+  program_id = f"swe-{next(_PROGRAM_COUNTER):06d}"
+  model_config.setdefault("model_kwargs", {}).setdefault("extra_body", {})["program_id"] = program_id
+  ```
 
-
+- **Program release hook (free router-side state when an instance finishes)**  
+  Location: `examples/inference/mini-swe-agent/src/minisweagent/run/benchmarks/swebench.py`, `process_instance()` -> `finally:`.  
+  What: After saving results, call `POST /programs/release` on ThunderAgent with the same `program_id`.  
+  Why: ThunderAgent tracks per-program state (tokens, pause/resume bookkeeping). Releasing prevents finished programs from lingering and affecting scheduling/metrics.
+  ```python
+  base_url = (
+      model.config.model_kwargs.get("api_base")
+      or model.config.model_kwargs.get("base_url")
+      or ""
+  ).rstrip("/")
+  if base_url.endswith("/v1"):
+      base_url = base_url[:-3]
+  requests.post(f"{base_url}/programs/release", json={"program_id": program_id}, timeout=5)
+  ```
