@@ -44,7 +44,7 @@ mini-extra swebench \
 ```
 
 ## What we changed (to reuse in your own setup)
-- **Program ID injection (one ThunderAgent program per SWE-bench instance)**  
+- **Program ID injection**  
   Location: `examples/inference/mini-swe-agent/src/minisweagent/run/benchmarks/swebench.py` in `process_instance()`.  
   What: Generate a unique `program_id` per instance and inject it into `model_kwargs.extra_body.program_id` before creating the model.  
   Why: `LitellmModel` forwards `model_kwargs` to `litellm.completion(...)`, and ThunderAgent extracts `program_id` from either `payload["program_id"]` or `payload["extra_body"]["program_id"]` (see `ThunderAgent/app.py:get_program_id()`), so each instance gets an isolated ProgramState.
