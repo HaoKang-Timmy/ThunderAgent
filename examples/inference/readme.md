@@ -20,7 +20,9 @@ uv pip install -e examples/inference/mini-swe-agent
 uv pip install datasets
 ```
 
-## How to run the experiment(One node example)
+## How to run the experiment
+
+### One node example
 1) Start vLLM to serve the model:
 ```bash
 vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --port <VLLM_PORT>
@@ -42,6 +44,35 @@ mini-extra swebench \
   --workers 128 \
   --output ./swebench_output 
 ```
+
+### multi nodes example
+1) Start vLLM to serve the model:
+```bash
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+```
+
+```bash
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+```
+
+2) Start ThunderAgent (pointing at your vLLM backend):
+```bash
+python -m ThunderAgent --backends http://<VLLM_HOST1>:<VLLM_PORT>,http://<VLLM_HOST2>:<VLLM_PORT> --port <TA_PORT>
+```
+3) Configure mini-swe-agent to call ThunderAgent:
+
+- Edit `examples/inference/mini-swe-agent/src/minisweagent/config/benchmarks/swebench.yaml`
+- Set `model.model_kwargs.api_base` to `http://<TA_HOST>:<TA_PORT>/v1`
+
+4) Run SWE-Bench via mini-swe-agent through ThunderAgent:
+```bash
+mini-extra swebench \
+  --subset lite \
+  --split test \
+  --workers 128 \
+  --output ./swebench_output 
+```
+
 
 ## What we changed (to reuse in your own setup)
 - **Program ID injection**  
