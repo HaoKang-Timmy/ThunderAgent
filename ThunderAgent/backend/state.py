@@ -25,11 +25,11 @@ RESUME_COOLDOWN = 5.0   # Wait after resuming before resuming more
 
 TOOL_COEFFICIENT = 1.0
 
+# Buffer tokens reserved per active program (for decode headroom)
+BUFFER_PER_PROGRAM = 100
+
 class BackendState:
     """State of a single VLLM backend with self-managed metrics monitoring."""
-
-    # Shared system prompt tokens across programs (estimated from first request)
-    shared_token: Optional[int] = None
     
     def __init__(self, url: str):
         self.url = url
@@ -45,6 +45,10 @@ class BackendState:
         self.active_program_tokens: int = 0  # REASONING + TOOL_COEFFICIENT * ACTING
         self.active_program_count: int = 0    # Number of REASONING + ACTING programs
         self.total_program_tokens: int = 0    # All non-STOPPED programs (including PAUSED)
+        
+        # Shared tokens (prefix cache savings), computed from vLLM metrics
+        # = reasoning_program_tokens - vllm_actual_used_tokens
+        self.shared_tokens: int = 0
         
         # Future paused tokens: sum of tokens from REASONING programs marked for pause
         # These will be released when they transition to ACTING
@@ -91,19 +95,23 @@ class BackendState:
     def has_capacity(self, extra_tokens: int = 0, extra_count: int = 0) -> bool:
         """Check if adding extra tokens/programs would exceed capacity.
         
-        Constraint: active_tokens + active_count * DECODE_BUFFER <= total_capacity
+        Constraint: active_tokens - shared_tokens + buffer <= total_capacity
+        where buffer = (active_count + extra_count) * BUFFER_PER_PROGRAM
         """
         if not self.cache_config:
             return True  # No config, assume ok
         
         tokens = self.active_program_tokens + extra_tokens
         count = self.active_program_count + extra_count
-        shared_tokens = BackendState.shared_token or 0
-        required = tokens + count * DECODE_BUFFER - max(0, (self.active_program_count + extra_count - 1)) * shared_tokens
+        buffer = count * BUFFER_PER_PROGRAM
+        required = tokens - self.shared_tokens + buffer
         return required <= self.cache_config.total_tokens_capacity
     
     def capacity_overflow(self, include_future_release: bool = False) -> int:
         """Return how many tokens we're over capacity (0 if within capacity).
+        
+        Formula: active_tokens - shared_tokens + buffer - capacity
+        where buffer = active_count * BUFFER_PER_PROGRAM
         
         Args:
             include_future_release: If True, subtract future_paused_tokens from the calculation.
@@ -111,12 +119,20 @@ class BackendState:
         """
         if not self.cache_config:
             return 0
-        shared_tokens = BackendState.shared_token or 0
-        required = self.active_program_tokens + self.active_program_count * DECODE_BUFFER - max(0, (self.active_program_count - 1)) * shared_tokens
+        buffer = self.active_program_count * BUFFER_PER_PROGRAM
+        required = self.active_program_tokens - self.shared_tokens + buffer
         if include_future_release:
             required -= self.future_paused_tokens
         overflow = required - self.cache_config.total_tokens_capacity
         return max(0, overflow)
+    
+    def remaining_capacity(self) -> int:
+        """Return remaining capacity for new programs (can be negative if over capacity)."""
+        if not self.cache_config:
+            return float('inf')
+        buffer = self.active_program_count * BUFFER_PER_PROGRAM
+        used = self.active_program_tokens - self.shared_tokens + buffer
+        return self.cache_config.total_tokens_capacity - used
     
     # -------------------------------------------------------------------------
     # Cooldown Management
@@ -344,8 +360,8 @@ class BackendState:
             "total_program_tokens": self.total_program_tokens,
             "paused_program_count": paused_program_count,
             "future_paused_tokens": self.future_paused_tokens,
-            "shared_token": BackendState.shared_token,
-            "decode_buffer": DECODE_BUFFER,
+            "shared_tokens": self.shared_tokens,
+            "buffer_per_program": BUFFER_PER_PROGRAM,
             "capacity_overflow": self.capacity_overflow(),
         }
         # Include cache config (static)

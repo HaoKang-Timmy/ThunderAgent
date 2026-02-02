@@ -57,7 +57,7 @@ async def chat_completions(request: Request):
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
-    # Get or create program state (auto-assigns to least loaded backend)
+    # Get or create program state (new programs go to waiting queue)
     program_id = get_program_id(payload)
     program_state = router.get_or_create_program(program_id)
 

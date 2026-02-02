@@ -27,7 +27,7 @@ class ProgramStatus(Enum):
 @dataclass
 class ProgramState:
     """State of a single program (task)."""
-    backend_url: str  # Which backend this program is assigned to
+    backend_url: Optional[str] = None  # Which backend this program is assigned to (None if waiting)
     status: ProgramStatus = ProgramStatus.PAUSED
     context_len: int = 0
     total_tokens: int = 0
