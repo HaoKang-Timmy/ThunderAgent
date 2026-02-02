@@ -37,7 +37,6 @@ python -m ThunderAgent --backends http://localhost:<VLLM_PORT> --port <TA_PORT>
 4) Run SWE-Bench via mini-swe-agent through ThunderAgent:
 ```bash
 mini-extra swebench \
-  -c swebench.yaml \
   --subset lite \
   --split test \
   --workers 128 \
