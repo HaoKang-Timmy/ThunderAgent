@@ -8,7 +8,12 @@ set -euo pipefail
 # is consistent with this script (model name, api_base -> http://localhost:${TA_PORT}/v1, tool parser, etc.).
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
+# Resolve repo root so `python -m ThunderAgent` can import the local ThunderAgent package.
+# (This script lives under examples/inference/mini-swe-agent/scripts/reproduce/)
+REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${REPO_ROOT}" ]]; then
+  REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../../../.." && pwd)"
+fi
 cd "${REPO_ROOT}"
 
 VLLM_PORT="${VLLM_PORT:-8100}"

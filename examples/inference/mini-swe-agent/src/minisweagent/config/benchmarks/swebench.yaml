@@ -150,7 +150,7 @@ model:
 
     If you have completed your assignment, please consult the first message about how to
     submit your solution (you will not be able to continue working on this task after that).
-  model_name: "/data/models/GLM-4.5-FP8"
+  model_name: "GLM-4.6-FP8"
   cost_tracking: "ignore_errors"
   model_kwargs:
     custom_llm_provider: openai
