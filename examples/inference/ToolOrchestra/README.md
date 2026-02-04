@@ -115,6 +115,28 @@ cp setup_envs.sh_example setup_envs.sh
 source setup_envs.sh
 ```
 
+## Figure Reproduction
+These scripts reproduce the throughput plot in the paper for **ToolOrchestra (HLE) – Qwen3-8B**.
+
+Test hardware: 2× RTX 5090 (Orchestrator on GPU0, Retriever on GPU1) + external expert APIs.
+
+Scripts:
+- `scripts/reproduce/reproduce_hle_qwen3_8b.sh` runs C ∈ {24, 32, 40, 48} for `baseline`, `continuum`, `thunderagent`.
+- `scripts/reproduce/plot_hle_qwen3_8b.py` reads the latest runs and draws the plot.
+
+```bash
+# Run all settings (this is long: 12 runs at 2h30 each by default)
+./scripts/reproduce/reproduce_hle_qwen3_8b.sh
+
+# Plot throughput (step/min)
+./scripts/reproduce/plot_hle_qwen3_8b.py
+# Output: evaluation/reports/hle_qwen3_8b_throughput.png
+```
+
+Expected result (throughput comparison):
+![throughput_compare](../docs/toolorchestra/throughput_compare.png)
+
+
 ## How to Run Experiments
 
 ### Quick Start
@@ -306,7 +328,8 @@ ToolOrchestra/
 ├── scripts/
 │   ├── 5090/                    # RTX 5090 launch scripts
 │   ├── analysis/                # Result analysis scripts
-│   └── hle_serving/             # HLE serving helpers
+│   ├── hle_serving/             # HLE serving helpers
+│   └── reproduce/               # Paper reproduction scripts
 ├── assets/                      # Figures and documentation assets
 ```
 

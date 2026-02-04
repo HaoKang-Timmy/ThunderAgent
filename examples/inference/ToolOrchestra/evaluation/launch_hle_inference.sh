@@ -395,12 +395,3 @@ out = {
 }
 print(json.dumps(out, ensure_ascii=False, indent=2))
 PY
-    --model_name "${MODEL_NAME}" \
-    --output_dir "${OUTPUT_DIR}" \
-    --model_config "${MODEL_CONFIG}" \
-    --max_rounds "${MAX_ROUNDS}" \
-    --model_type "${MODEL_TYPE}" \
-    --example_path "${EXAMPLE_PATH}" \
-    --concurrency "${CONCURRENCY}" \
-    --log_level "${LOG_LEVEL}"
-)
