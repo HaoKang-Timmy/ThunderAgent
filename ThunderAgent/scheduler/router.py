@@ -212,14 +212,9 @@ class MultiBackendRouter:
                 state=ProgramState.ACTIVE,
                 profile=profile,
             )
-            
-            # Estimate token count from payload using global char_to_token_ratio
-            if payload:
-                state.context_len = len(json.dumps(payload, ensure_ascii=False))
-                state.total_tokens = int(state.context_len / self.char_to_token_ratio)
-            
+            # Token estimation is done in update_program_before_request
             self.programs[program_id] = state
-            logger.debug(f"Created program {program_id} (estimated tokens={state.total_tokens})")
+            logger.debug(f"Created program {program_id}")
         
         return self.programs[program_id]
     
@@ -276,12 +271,8 @@ class MultiBackendRouter:
         is_new_program = state.step_count == 1
         
         # Update context_len and estimate total_tokens using char_to_token_ratio
-        if not is_new_program:
-            state.context_len = len(json.dumps(payload, ensure_ascii=False))
-            # Estimate tokens for this request using the global ratio
-            estimated_tokens = int(state.context_len / self.char_to_token_ratio)
-            state.total_tokens = estimated_tokens
-        # Note: For new programs, total_tokens was already estimated in get_or_create_program
+        state.context_len = len(json.dumps(payload, ensure_ascii=False))
+        state.total_tokens = int(state.context_len / self.char_to_token_ratio)
         
         # ---------------------------------------------------------------------
         # Default mode: pure proxy, no scheduling
@@ -640,7 +631,7 @@ class MultiBackendRouter:
     # -------------------------------------------------------------------------
 
     async def _scheduler_loop(self):
-        """Periodic scheduler loop: update shared_tokens, check thrashing, resume."""
+        """Periodic scheduler loop: check thrashing, update shared_tokens, resume."""
         while not self._scheduler_stop:
             try:
                 await asyncio.sleep(self._scheduler_interval)
@@ -651,28 +642,20 @@ class MultiBackendRouter:
                 logger.error(f"Scheduler error: {e}", exc_info=True)
 
     async def _scheduled_check(self):
-        """Periodic check: update shared_tokens, enforce capacity, resume waiting programs."""
-        #TODO probably need to chagne because usage is too easy to change
-        # Step 1 & 2: For each backend, fetch fresh metrics, update shared_tokens, check thrashing
+        """Periodic check: enforce capacity, update shared_tokens, resume waiting programs."""
+        # Step 1: Check thrashing and pause if needed (uses cached shared_tokens)
         for url, backend in self.backends.items():
-            # Step 1a: Fetch fresh metrics from vLLM (real-time sampling)
-            await backend._fetch_metrics()
-            
-            # Step 1b: Update shared_tokens from vLLM metrics
-            if backend.latest_metrics and backend.cache_config:
-                vllm_actual_used = int(
-                    backend.latest_metrics.kv_cache_usage_perc 
-                    * backend.cache_config.total_tokens_capacity
-                )
-                # shared_tokens = what we track - what vLLM actually uses
-                backend.shared_tokens = max(0, backend.reasoning_program_tokens - vllm_actual_used)
-            
-            # Step 2: Check thrashing and pause if needed
+            # Check thrashing based on tracked program_tokens and cached shared_tokens
             if backend.cache_config and backend.remaining_capacity() < 0:
                 await self._pause_until_safe(backend)
         
-        # Step 3: Resume waiting programs using greedy algorithm
+        # Step 2: Resume waiting programs (using cached shared_tokens from last cycle)
         await self._greedy_resume()
+        
+        # Step 3: Fetch fresh metrics and update shared_tokens for next cycle
+        for backend in self.backends.values():
+            await backend.fetch_metrics()
+            backend.update_shared_tokens()
 
     async def _pause_until_safe(self, backend: BackendState):
         """Pause programs until backend is within capacity.
@@ -711,9 +694,10 @@ class MultiBackendRouter:
     async def _greedy_resume(self):
         """Resume waiting programs using greedy algorithm.
         
-        Priority:
-        1. REASONING programs first (smallest tokens first)
-        2. Then ACTING programs (smallest tokens first)
+        Priority (all sorted by token count ascending):
+        1. REASONING programs (step > 1) - highest priority
+        2. NEW programs (step = 1, REASONING) - medium priority
+        3. ACTING programs - lowest priority
         
         Backends sorted by remaining capacity (largest first).
         """
@@ -739,18 +723,24 @@ class MultiBackendRouter:
             if not waiting:
                 return
             
-            # Separate REASONING and ACTING programs
-            reasoning_waiting = [
-                (pid, state, info) for pid, state, info in waiting
-                if info.paused_from_status == "reasoning"
-            ]
-            acting_waiting = [
-                (pid, state, info) for pid, state, info in waiting
-                if info.paused_from_status != "reasoning"  # includes "acting" and None (new programs)
-            ]
+            # Separate programs into three priority groups
+            experienced_reasoning = []  # REASONING with step > 1
+            new_programs = []           # step = 1 (new programs)
+            acting_waiting = []         # ACTING programs
             
-            # Process in priority order: REASONING first, then ACTING
-            ordered_waiting = reasoning_waiting + acting_waiting
+            for pid, state, info in waiting:
+                if state.step_count == 1:
+                    # New programs (step = 1) - medium priority
+                    new_programs.append((pid, state, info))
+                elif info.paused_from_status == "reasoning":
+                    # Experienced REASONING - highest priority
+                    experienced_reasoning.append((pid, state, info))
+                else:
+                    # ACTING programs - lowest priority
+                    acting_waiting.append((pid, state, info))
+            
+            # Process in priority order: experienced_reasoning → new → acting
+            ordered_waiting = experienced_reasoning + new_programs + acting_waiting
             
             resumed_count = 0
             for program_id, state, info in ordered_waiting:
@@ -768,7 +758,7 @@ class MultiBackendRouter:
                         break
             
             if resumed_count > 0:
-                logger.info(f"Scheduler resumed {resumed_count} programs from waiting queue (reasoning={len(reasoning_waiting)}, acting={len(acting_waiting)})")
+                logger.info(f"Scheduler resumed {resumed_count} programs (experienced_reasoning={len(experienced_reasoning)}, new={len(new_programs)}, acting={len(acting_waiting)})")
 
     async def _wait_for_resume(self, program_id: str, state: Program, timeout: float = 1800.0) -> None:
         """Wait for a paused program to be resumed.
