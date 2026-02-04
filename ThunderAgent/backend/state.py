@@ -2,14 +2,16 @@
 import asyncio
 import logging
 import time
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, Set, TYPE_CHECKING
 
 import httpx
 
 from .vllm_metrics import VLLMMetrics, VLLMCacheConfig
 
 if TYPE_CHECKING:
-    from ..program.state import ProgramState
+    from ..program.state import Program, ProgramState
+
+from ..program.state import ProgramStatus
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +39,8 @@ class BackendState:
         # Static cache config (fetched once at startup)
         self.cache_config: Optional[VLLMCacheConfig] = None
         
-        # Program token tracking
-        self.reasoning_program_tokens: int = 0  # REASONING programs only
-        self.acting_program_tokens: int = 0     # ACTING programs only
-        self.active_program_tokens: int = 0  # REASONING + self.tool_coefficient * ACTING
-        self.active_program_count: int = 0    # Number of REASONING + ACTING programs
-        self.total_program_tokens: int = 0    # All non-STOPPED programs (including PAUSED)
+        # Program tracking - all token stats are computed from this set
+        self._programs: Set["Program"] = set()
         
         # Shared tokens (prefix cache savings), computed from vLLM metrics
         # = reasoning_program_tokens - vllm_actual_used_tokens
@@ -74,6 +72,33 @@ class BackendState:
     def latest_metrics(self) -> Optional[VLLMMetrics]:
         """Get the most recent metrics sample."""
         return self.metrics_history[-1] if self.metrics_history else None
+    
+    @property
+    def reasoning_program_tokens(self) -> int:
+        """Sum of tokens from all REASONING programs."""
+        return sum(p.total_tokens for p in self._programs 
+                   if p.status == ProgramStatus.REASONING)
+    
+    @property
+    def acting_program_tokens(self) -> int:
+        """Sum of tokens from all ACTING programs."""
+        return sum(p.total_tokens for p in self._programs 
+                   if p.status == ProgramStatus.ACTING)
+    
+    @property
+    def active_program_tokens(self) -> int:
+        """Computed: reasoning_tokens + tool_coefficient * acting_tokens."""
+        return int(self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens)
+    
+    @property
+    def active_program_count(self) -> int:
+        """Number of active (REASONING + ACTING) programs."""
+        return len(self._programs)
+    
+    @property
+    def total_program_tokens(self) -> int:
+        """Sum of tokens from all programs on this backend."""
+        return sum(p.total_tokens for p in self._programs)
     
     @property
     def active_program_tokens_ratio(self) -> float:
@@ -129,104 +154,20 @@ class BackendState:
         return self.cache_config.total_tokens_capacity - used
     
     # -------------------------------------------------------------------------
-    # Cooldown Management
+    # Program Registration
     # -------------------------------------------------------------------------
     
-    # -------------------------------------------------------------------------
-    # Program Token Management
-    # -------------------------------------------------------------------------
+    def register_program(self, program: "Program") -> None:
+        """Register a program with this backend.
+        
+        All token stats (reasoning_program_tokens, acting_program_tokens, etc.)
+        are computed from the registered programs.
+        """
+        self._programs.add(program)
     
-    def add_active_program(self, tokens: int, *, is_acting: bool = False) -> None:
-        """Add a program to active (REASONING/ACTING) state."""
-        if is_acting:
-            self.acting_program_tokens += tokens
-        else:
-            self.reasoning_program_tokens += tokens
-        self.active_program_tokens = int(
-            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
-        )
-        self.active_program_count += 1
-    
-    def remove_active_program(self, tokens: int, *, is_acting: bool = False) -> None:
-        """Remove a program from active state (-> PAUSED)."""
-        if is_acting:
-            self.acting_program_tokens -= tokens
-        else:
-            self.reasoning_program_tokens -= tokens
-        self.active_program_tokens = int(
-            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
-        )
-        self.active_program_count -= 1
-        if self.active_program_tokens < 0:
-            logger.warning(f"active_program_tokens went negative ({self.active_program_tokens}), resetting to 0")
-            self.active_program_tokens = 0
-        if self.reasoning_program_tokens < 0:
-            logger.warning(f"reasoning_program_tokens went negative ({self.reasoning_program_tokens}), resetting to 0")
-            self.reasoning_program_tokens = 0
-        if self.acting_program_tokens < 0:
-            logger.warning(f"acting_program_tokens went negative ({self.acting_program_tokens}), resetting to 0")
-            self.acting_program_tokens = 0
-        if self.active_program_count < 0:
-            logger.warning(f"active_program_count went negative ({self.active_program_count}), resetting to 0")
-            self.active_program_count = 0
-    
-    def add_total_program(self, tokens: int) -> None:
-        """Add tokens to total (new program, any state except STOPPED)."""
-        self.total_program_tokens += tokens
-    
-    def remove_total_program(self, tokens: int) -> None:
-        """Remove tokens from total (program STOPPED)."""
-        self.total_program_tokens -= tokens
-        if self.total_program_tokens < 0:
-            logger.warning(f"total_program_tokens went negative ({self.total_program_tokens}), resetting to 0")
-            self.total_program_tokens = 0
-    
-    def shift_tokens_to_acting(self, old_tokens: int, new_tokens: int) -> None:
-        """Move tokens from REASONING to ACTING and update totals after a request."""
-        self.reasoning_program_tokens -= old_tokens
-        self.acting_program_tokens += new_tokens
-        self.active_program_tokens = int(
-            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
-        )
-        self.total_program_tokens += (new_tokens - old_tokens)
-        if self.reasoning_program_tokens < 0:
-            logger.warning(f"reasoning_program_tokens went negative ({self.reasoning_program_tokens}), resetting to 0")
-            self.reasoning_program_tokens = 0
-        if self.acting_program_tokens < 0:
-            logger.warning(f"acting_program_tokens went negative ({self.acting_program_tokens}), resetting to 0")
-            self.acting_program_tokens = 0
-        if self.active_program_tokens < 0:
-            logger.warning(f"active_program_tokens went negative ({self.active_program_tokens}), resetting to 0")
-            self.active_program_tokens = 0
-        if self.total_program_tokens < 0:
-            logger.warning(f"total_program_tokens went negative ({self.total_program_tokens}), resetting to 0")
-            self.total_program_tokens = 0
-
-    def shift_tokens_to_reasoning(self, tokens: int) -> None:
-        """Move tokens from ACTING to REASONING when a new request starts."""
-        self.acting_program_tokens -= tokens
-        self.reasoning_program_tokens += tokens
-        self.active_program_tokens = int(
-            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
-        )
-        if self.reasoning_program_tokens < 0:
-            logger.warning(f"reasoning_program_tokens went negative ({self.reasoning_program_tokens}), resetting to 0")
-            self.reasoning_program_tokens = 0
-        if self.acting_program_tokens < 0:
-            logger.warning(f"acting_program_tokens went negative ({self.acting_program_tokens}), resetting to 0")
-            self.acting_program_tokens = 0
-        if self.active_program_tokens < 0:
-            logger.warning(f"active_program_tokens went negative ({self.active_program_tokens}), resetting to 0")
-            self.active_program_tokens = 0
-    
-    # Legacy methods for compatibility
-    def add_program_tokens(self, tokens: int) -> None:
-        """Add tokens when a program becomes active (REASONING/ACTING)."""
-        self.add_active_program(tokens)
-    
-    def remove_program_tokens(self, tokens: int) -> None:
-        """Remove tokens when a program becomes inactive (PAUSED/STOPPED)."""
-        self.remove_active_program(tokens)
+    def unregister_program(self, program: "Program") -> None:
+        """Unregister a program from this backend."""
+        self._programs.discard(program)
     
     # -------------------------------------------------------------------------
     # Metrics Monitoring (self-managed)

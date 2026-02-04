@@ -293,11 +293,9 @@ class MultiBackendRouter:
                 backend = self.select_backend_for_new_program_default()
                 state.backend_url = backend.url
             
-            if state.status == ProgramStatus.ACTING:
-                backend.shift_tokens_to_reasoning(state.total_tokens)
             if is_new_program:
-                backend.add_total_program(state.total_tokens)
-                backend.add_active_program(state.total_tokens, is_acting=False)
+                backend.register_program(state)
+            # Status change is enough - token stats are computed from program status
             state.status = ProgramStatus.REASONING
             return True
         
@@ -319,11 +317,10 @@ class MultiBackendRouter:
         if is_new_program and state.backend_url is None:
             backend_url = self._select_backend_for_new_program(state.total_tokens)
             if backend_url:
-                # Direct assignment: add tokens immediately
+                # Direct assignment: register program with backend
                 state.backend_url = backend_url
                 backend = self.backends[backend_url]
-                backend.add_total_program(state.total_tokens)
-                backend.add_active_program(state.total_tokens, is_acting=False)
+                backend.register_program(state)
                 logger.debug(f"Assigned new program {program_id} to {backend_url}")
                 state.status = ProgramStatus.REASONING
                 return True
@@ -344,10 +341,7 @@ class MultiBackendRouter:
             logger.error(f"Program {program_id} has no valid backend")
             return False
         
-        # Shift from ACTING to REASONING
-        if state.status == ProgramStatus.ACTING:
-            backend.shift_tokens_to_reasoning(state.total_tokens)
-        
+        # Status change is enough - token stats are computed from program status
         state.status = ProgramStatus.REASONING
         return True
 
@@ -383,15 +377,8 @@ class MultiBackendRouter:
                 self.char_to_token_ratio = 0.2 * current_ratio + 0.8 * self.char_to_token_ratio
                 logger.debug(f"Updated char_to_token_ratio={self.char_to_token_ratio:.2f} (sample={current_ratio:.2f})")
         
-        backend = self.backends.get(state.backend_url)
-        if not backend:
-            state.total_tokens = total_tokens
-            return
-        
-        # Update tokens
-        old_tokens = state.total_tokens
+        # Update total_tokens - token stats are computed from program state
         state.total_tokens = total_tokens
-        backend.shift_tokens_to_acting(old_tokens, total_tokens)
         
         # If marked for pause, pause now (while in ACTING state)
         if state.marked_for_pause:
@@ -408,19 +395,8 @@ class MultiBackendRouter:
             state: The program state
             delta_tokens: Number of new tokens since last update
         """
-        backend = self.backends.get(state.backend_url)
-        if not backend:
-            state.total_tokens += delta_tokens
-            return
-        
-        # Program is in REASONING state during streaming, update reasoning tokens
+        # Just update program's total_tokens - backend stats are computed from program state
         state.total_tokens += delta_tokens
-        backend.reasoning_program_tokens += delta_tokens
-        backend.total_program_tokens += delta_tokens
-        # Recalculate active_program_tokens
-        backend.active_program_tokens = int(
-            backend.reasoning_program_tokens + backend.tool_coefficient * backend.acting_program_tokens
-        )
 
     async def release_program(self, program_id: str) -> bool:
         """Stop a program and release its resources.
@@ -440,11 +416,7 @@ class MultiBackendRouter:
             if state.waiting_event:
                 state.waiting_event.set()  # Unblock any waiting coroutine
         elif backend and state.state == ProgramState.ACTIVE:
-            backend.remove_active_program(
-                state.total_tokens,
-                is_acting=(state.status == ProgramStatus.ACTING),
-            )
-            backend.remove_total_program(state.total_tokens)
+            backend.unregister_program(state)
         
         # Clear mark if was marked
         if backend and state.marked_for_pause:
@@ -558,14 +530,8 @@ class MultiBackendRouter:
         # Record the status before pause (for resume)
         paused_from_status = state.status.value if state.status else None
         
-        # Remove from active counts
-        backend.remove_active_program(
-            state.total_tokens,
-            is_acting=(state.status == ProgramStatus.ACTING),
-        )
-        
-        # Remove from total counts (will be re-added on resume to target backend)
-        backend.remove_total_program(state.total_tokens)
+        # Unregister from backend
+        backend.unregister_program(state)
         
         # Add to global paused pool with original status recorded
         self._add_to_global_waiting_queue_sync(program_id, state, backend, paused_from_status)
@@ -641,16 +607,10 @@ class MultiBackendRouter:
         if state.state != ProgramState.PAUSED:
             return
 
-        # Add to target backend's total counts (was removed during pause)
-        backend.add_total_program(state.total_tokens)
+        # Register with target backend
+        backend.register_program(state)
         state.backend_url = backend.url
         state.origin_backend = None  # Clear origin_backend after resume
-
-        # Resume to ACTIVE lifecycle with ACTING status:
-        # - status stays as it was before pause (ACTING or REASONING for new programs)
-        # - If a request is waiting (via _wait_for_resume), before_request will shift to REASONING
-        # - If no request is waiting (periodic scheduler), program stays ACTING until next request
-        backend.add_active_program(state.total_tokens, is_acting=(state.status == ProgramStatus.ACTING))
         state.state = ProgramState.ACTIVE
         
         # Signal waiting event and clear it (resume completes the pause-resume cycle)
