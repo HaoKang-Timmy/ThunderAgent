@@ -56,10 +56,9 @@ async def chat_completions(request: Request):
         payload = await request.json()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON") from exc
-    #TODO test
     # Get or create program state (new programs go to waiting queue)
     program_id = get_program_id(payload)
-    program_state = router.get_or_create_program(program_id)
+    program_state = router.get_or_create_program(program_id, payload)
 
     # Profile: record request arrival BEFORE pause check (for accurate tool_call_time)
     if program_state.profile:
@@ -77,7 +76,7 @@ async def chat_completions(request: Request):
 
     # Callback to update state after response
     async def on_usage(total_tokens: int, prompt_tokens: int, cached_tokens: int) -> None:
-        await router.update_program_after_request(program_id, program_state, total_tokens)
+        router.update_program_after_request(program_id, program_state, total_tokens)
         # Profile: record request end with KV cache info
         if program_state.profile:
             program_state.profile.on_request_end(prompt_tokens, cached_tokens)

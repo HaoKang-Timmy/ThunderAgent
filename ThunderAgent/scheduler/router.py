@@ -8,12 +8,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Callable, Awaitable, Tuple
 
 import httpx
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 
 from ..backend import BackendState
-from ..program import ProgramState, ProgramStatus
+from ..program import Program, ProgramStatus, ProgramState
 from ..profile.state import ProfileState
 from ..config import get_config
+from .vllm_request_processor import (
+    forward_streaming_request,
+    forward_non_streaming_request,
+    forward_get_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,7 @@ class PausedInfo:
     paused_at: float
     origin_backend: Optional[str]  # None for new programs that haven't been assigned yet
     step_count: int
+    paused_from_status: Optional[str] = None  # Status before pause: "reasoning", "acting", or None for new programs
 
 
 class MultiBackendRouter:
@@ -48,8 +54,8 @@ class MultiBackendRouter:
         }
         
         # All programs (single source of truth)
-        # Key: program_id, Value: ProgramState (which includes backend_url)
-        self.programs: Dict[str, ProgramState] = {}
+        # Key: program_id, Value: Program (which includes backend_url)
+        self.programs: Dict[str, Program] = {}
 
         # Global paused pool shared across backends (program_id -> PausedInfo).
         self.global_waiting_queue: Dict[str, PausedInfo] = {}
@@ -126,7 +132,7 @@ class MultiBackendRouter:
         """Get the first backend (for simple single-backend usage)."""
         return next(iter(self.backends.values()))
 
-    def select_backend_for_new_program(self) -> BackendState:
+    def select_backend_for_new_program_default(self) -> BackendState:
         """Select the least loaded backend for a new program."""
         # Count programs per backend
         #### TODO change backend assign logistics
@@ -179,56 +185,68 @@ class MultiBackendRouter:
         text = "\n".join(parts)
         return max(0, len(text) // 5)
 
-    def get_or_create_program(self, program_id: str) -> ProgramState:
+    def get_or_create_program(self, program_id: str, payload: Dict[str, Any] = None) -> Program:
         """Get existing program or create new one.
         
-        Assignment logic (when scheduling_enabled):
-        - If waiting queue is empty AND a backend has capacity: assign directly
-        - Otherwise: add to waiting queue (PAUSED state)
+        Only creates the program and estimates token count.
+        Backend assignment is deferred to update_program_before_request.
         
-        Note: Uses synchronous dict operations which are atomic in Python's asyncio
-        single-threaded model. No lock needed since there's no await in this function.
+        Args:
+            program_id: Unique identifier for the program
+            payload: Request payload, used to estimate token count for new programs
         """
         if program_id not in self.programs:
             profile = ProfileState(program_id=program_id) if self.profile_enabled else None
-            state = ProgramState(
+            state = Program(
                 backend_url=None,
-                status=ProgramStatus.PAUSED,
+                status=ProgramStatus.REASONING,  # Request arrived, program is reasoning
+                state=ProgramState.ACTIVE,
                 profile=profile,
             )
+            
+            # Estimate token count from payload
+            if payload:
+                state.context_len = len(json.dumps(payload, ensure_ascii=False))
+                state.total_tokens = state.context_len // 5
+            
             self.programs[program_id] = state
-            
-            # Try direct assignment if scheduling enabled and queue is empty
-            if self.scheduling_enabled and len(self.global_waiting_queue) == 0:
-                backend = self._find_backend_with_least_active_tokens()
-                if backend and backend.remaining_capacity() > 0:
-                    # Direct assignment: set backend, no waiting event, no queue
-                    state.backend_url = backend.url
-                    # Leave waiting_event as None so update_program_before_request won't wait
-                    logger.debug(f"Directly assigned program {program_id} to {backend.url}")
-                    return state
-            
-            # Need to queue: create waiting event and add to queue
-            state.waiting_event = asyncio.Event()
-            state.waiting_event.clear()
-            self._add_to_global_waiting_queue_sync(program_id, state, backend=None)
-            logger.debug(f"Created program {program_id} in waiting queue")
+            logger.debug(f"Created program {program_id} (estimated tokens={state.total_tokens})")
         
         return self.programs[program_id]
     
-    def _find_backend_with_least_active_tokens(self) -> Optional[BackendState]:
-        """Find the healthy backend with the least active tokens."""
+    def _select_backend_for_new_program(self, estimated_tokens: int = 0) -> Optional[str]:
+        """Select a backend for a new program (TR mode only).
+        
+        This function is only called when scheduling_enabled=True.
+        
+        Args:
+            estimated_tokens: Estimated token count for the new program
+        
+        Returns:
+            backend_url if can assign directly (queue empty + has capacity)
+            None if should wait in queue
+        """
+        from ..backend.state import BUFFER_PER_PROGRAM
+        
+        # Only assign if queue is empty and backend has capacity
+        if len(self.global_waiting_queue) > 0:
+            return None  # Queue not empty, must wait for fairness
+        
+        # Find backend with least active tokens that has capacity for this program
         best_backend = None
         min_tokens = float('inf')
+        required_capacity = estimated_tokens + BUFFER_PER_PROGRAM
         
         for backend in self.backends.values():
             if not backend.healthy:
                 continue
+            if backend.remaining_capacity() < required_capacity:
+                continue  # Not enough capacity for this program
             if backend.active_program_tokens < min_tokens:
                 min_tokens = backend.active_program_tokens
                 best_backend = backend
         
-        return best_backend
+        return best_backend.url if best_backend else None
 
     def get_backend_for_program(self, program_id: str) -> BackendState:
         """Get the backend assigned to a program."""
@@ -237,7 +255,7 @@ class MultiBackendRouter:
             return self.backends[state.backend_url]
         return self.get_default_backend()
 
-    async def update_program_before_request(self, program_id: str, state: ProgramState, payload: Dict[str, Any]) -> bool:
+    async def update_program_before_request(self, program_id: str, state: Program, payload: Dict[str, Any]) -> bool:
         """Update program state before sending request to vLLM.
         
         If scheduling_enabled=False (default mode): pure proxy, no capacity checks.
@@ -246,13 +264,12 @@ class MultiBackendRouter:
         Returns: True if can proceed
         """
         state.step_count += 1
-        state.context_len = len(json.dumps(payload, ensure_ascii=False))
-        
         is_new_program = state.step_count == 1
         
-        # On first request, estimate total_tokens
-        if is_new_program:
-            state.total_tokens = state.context_len // 5
+        # Update context_len (for non-new programs, context grows with each request)
+        if not is_new_program:
+            state.context_len = len(json.dumps(payload, ensure_ascii=False))
+        # Note: For new programs, total_tokens was already estimated in get_or_create_program
         
         # ---------------------------------------------------------------------
         # Default mode: pure proxy, no scheduling
@@ -261,7 +278,7 @@ class MultiBackendRouter:
             backend = self.backends.get(state.backend_url)
             if not backend:
                 # Assign to least loaded backend
-                backend = self.select_backend_for_new_program()
+                backend = self.select_backend_for_new_program_default()
                 state.backend_url = backend.url
             
             if state.status == ProgramStatus.ACTING:
@@ -275,58 +292,58 @@ class MultiBackendRouter:
         # ---------------------------------------------------------------------
         # TR mode: scheduler-based capacity management
         # ---------------------------------------------------------------------
-        
-        # Track if tokens were already tracked by _resume_program
-        tokens_already_tracked = False
-        
-        # Check 1: If PAUSED with waiting_event, wait for scheduler to resume
-        if state.status == ProgramStatus.PAUSED and state.waiting_event is not None:
+        # Step 1: Handle PAUSED programs (wait for resume)
+        # Note: waiting_event is created in _pause_program and cleared in _resume_program.
+        # If waiting_event is not None, the program is still PAUSED and we must wait.
+        if state.waiting_event is not None:
             await self._wait_for_resume(program_id, state)
-            # After resume, backend_url is set and tokens tracked by _resume_program
-            tokens_already_tracked = True
+            # After _wait_for_resume returns, _resume_program has been called which:
+            # - Added tokens to backend (as ACTING or REASONING based on status at pause time)
+            # - Set state.state = ACTIVE
+            # - Cleared waiting_event = None
+            # Fall through to Step 3 to handle token shift if needed
         
-        # Check 2: If marked for pause, pause now and wait
-        if state.marked_for_pause:
-            logger.info(f"Program {program_id} was marked for pause, pausing now")
-            await self._clear_mark_and_pause(program_id, state)
-            await self._wait_for_resume(program_id, state)
-            tokens_already_tracked = True
-        
-        # Now we should have a backend assigned
-        backend = self.backends.get(state.backend_url)
-        if not backend:
-            logger.error(f"Program {program_id} has no valid backend after resume")
-            return False
-        
-        # Transition to REASONING and update token tracking
-        if not tokens_already_tracked:
-            # Either directly assigned new program or existing ACTING program
-            if is_new_program:
+        # Step 2: Handle new programs (assign backend or queue)
+        if is_new_program and state.backend_url is None:
+            backend_url = self._select_backend_for_new_program(state.total_tokens)
+            if backend_url:
+                # Direct assignment: add tokens immediately
+                state.backend_url = backend_url
+                backend = self.backends[backend_url]
                 backend.add_total_program(state.total_tokens)
                 backend.add_active_program(state.total_tokens, is_acting=False)
-            elif state.status == ProgramStatus.ACTING:
-                backend.shift_tokens_to_reasoning(state.total_tokens)
+                logger.debug(f"Assigned new program {program_id} to {backend_url}")
+                state.status = ProgramStatus.REASONING
+                return True
+            else:
+                # Queue and wait
+                state.waiting_event = asyncio.Event()
+                state.state = ProgramState.PAUSED
+                self._add_to_global_waiting_queue_sync(program_id, state, backend=None)
+                logger.debug(f"Queued new program {program_id} (tokens={state.total_tokens})")
+                await self._wait_for_resume(program_id, state)
+                # After resume: tokens already added by _resume_program
+                state.status = ProgramStatus.REASONING
+                return True
+        
+        # Step 3: Normal case - existing ACTIVE program with backend
+        backend = self.backends.get(state.backend_url)
+        if not backend:
+            logger.error(f"Program {program_id} has no valid backend")
+            return False
+        
+        # Shift from ACTING to REASONING
+        if state.status == ProgramStatus.ACTING:
+            backend.shift_tokens_to_reasoning(state.total_tokens)
         
         state.status = ProgramStatus.REASONING
         return True
 
-    async def _pause_new_program(self, program_id: str, state: ProgramState, backend: BackendState) -> None:
-        """Pause a new program that hasn't been added to active yet."""
-        await self._add_to_global_waiting_queue(program_id, state, backend)
-        state.status = ProgramStatus.PAUSED
-        
-        if state.waiting_event is None:
-            state.waiting_event = asyncio.Event()
-        else:
-            state.waiting_event.clear()
-        
-        logger.info(f"New program {program_id} paused (tokens={state.total_tokens})")
-
-    async def update_program_after_request(self, program_id: str, state: ProgramState, total_tokens: int) -> None:
+    def update_program_after_request(self, program_id: str, state: Program, total_tokens: int) -> None:
         """Update program state after receiving response from vLLM.
         
         Transitions to ACTING (off GPU, executing tool).
-        Updates token counts. Capacity enforcement is handled by the periodic scheduler.
+        Updates token counts. If marked for pause, pause immediately.
         """
         # Transition to ACTING
         state.status = ProgramStatus.ACTING
@@ -340,6 +357,10 @@ class MultiBackendRouter:
         old_tokens = state.total_tokens
         state.total_tokens = total_tokens
         backend.shift_tokens_to_acting(old_tokens, total_tokens)
+        
+        # If marked for pause, pause now (while in ACTING state)
+        if state.marked_for_pause:
+            self._clear_mark_and_pause(program_id, state)
 
     async def release_program(self, program_id: str) -> bool:
         """Stop a program and release its resources.
@@ -352,13 +373,13 @@ class MultiBackendRouter:
         state = self.programs[program_id]
         backend = self.backends.get(state.backend_url) if state.backend_url else None
         
-        # Clean up based on current status
-        if state.status == ProgramStatus.PAUSED:
+        # Clean up based on current lifecycle state
+        if state.state == ProgramState.PAUSED:
             # Remove from waiting queue
             await self._remove_from_global_waiting_queue(program_id)
             if state.waiting_event:
                 state.waiting_event.set()  # Unblock any waiting coroutine
-        elif backend and state.status in (ProgramStatus.REASONING, ProgramStatus.ACTING):
+        elif backend and state.state == ProgramState.ACTIVE:
             backend.remove_active_program(
                 state.total_tokens,
                 is_acting=(state.status == ProgramStatus.ACTING),
@@ -372,7 +393,7 @@ class MultiBackendRouter:
                 backend.future_paused_tokens = 0
             state.marked_for_pause = False
         
-        state.status = ProgramStatus.STOPPED
+        state.state = ProgramState.TERMINATED
         
         # Remove from programs dict
         del self.programs[program_id]
@@ -380,7 +401,7 @@ class MultiBackendRouter:
         logger.info(f"Released and removed program: {program_id}")
         return True
 
-    def get_programs_on_backend(self, backend_url: str) -> Dict[str, ProgramState]:
+    def get_programs_on_backend(self, backend_url: str) -> Dict[str, Program]:
         """Get all programs assigned to a specific backend."""
         return {
             pid: state for pid, state in self.programs.items()
@@ -392,7 +413,8 @@ class MultiBackendRouter:
     # -------------------------------------------------------------------------
 
     def _add_to_global_waiting_queue_sync(
-        self, program_id: str, state: ProgramState, backend: Optional[BackendState] = None
+        self, program_id: str, state: Program, backend: Optional[BackendState] = None,
+        paused_from_status: Optional[str] = None
     ) -> None:
         """Add a program to the global waiting queue (synchronous version)."""
         paused_info = PausedInfo(
@@ -401,11 +423,13 @@ class MultiBackendRouter:
             paused_at=time.time(),
             origin_backend=backend.url if backend else None,
             step_count=state.step_count,
+            paused_from_status=paused_from_status,
         )
         self.global_waiting_queue[program_id] = paused_info
 
     async def _add_to_global_waiting_queue(
-        self, program_id: str, state: ProgramState, backend: Optional[BackendState] = None
+        self, program_id: str, state: Program, backend: Optional[BackendState] = None,
+        paused_from_status: Optional[str] = None
     ) -> None:
         """Add or update a program in the global paused pool (async version with lock)."""
         paused_info = PausedInfo(
@@ -414,6 +438,7 @@ class MultiBackendRouter:
             paused_at=time.time(),
             origin_backend=backend.url if backend else None,
             step_count=state.step_count,
+            paused_from_status=paused_from_status,
         )
         async with self.pause_resume_lock:
             self.global_waiting_queue[program_id] = paused_info
@@ -425,12 +450,12 @@ class MultiBackendRouter:
 
     def _get_paused_programs_sorted(
         self, ascending: bool = True
-    ) -> List[Tuple[str, ProgramState, PausedInfo]]:
+    ) -> List[Tuple[str, Program, PausedInfo]]:
         """Get paused programs from the global pool, sorted by total_tokens.
 
         Callers that require consistency should hold pause_resume_lock.
         """
-        programs: List[Tuple[str, ProgramState, PausedInfo]] = []
+        programs: List[Tuple[str, Program, PausedInfo]] = []
         for pid, info in self.global_waiting_queue.items():
             state = self.programs.get(pid)
             if not state:
@@ -450,7 +475,7 @@ class MultiBackendRouter:
     # Capacity-based Scheduling (pause/resume)
     # -------------------------------------------------------------------------
 
-    def _get_acting_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, ProgramState]]:
+    def _get_acting_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, Program]]:
         """Get ACTING programs on a backend, sorted by total_tokens.
         
         Args:
@@ -462,7 +487,7 @@ class MultiBackendRouter:
         ]
         return sorted(programs, key=lambda x: x[1].total_tokens, reverse=not ascending)
 
-    def _get_reasoning_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, ProgramState]]:
+    def _get_reasoning_programs_sorted(self, backend_url: str, ascending: bool = True) -> List[Tuple[str, Program]]:
         """Get REASONING programs on a backend, sorted by total_tokens.
         
         Args:
@@ -476,8 +501,8 @@ class MultiBackendRouter:
         ]
         return sorted(programs, key=lambda x: x[1].total_tokens, reverse=not ascending)
 
-    async def _pause_program(self, program_id: str, state: ProgramState) -> None:
-        """Pause a program: remove from active, add to global paused pool.
+    def _pause_program(self, program_id: str, state: Program) -> None:
+        """Pause a program: remove from active and total, add to global paused pool.
         
         Only call this for ACTING programs. REASONING programs should be marked instead.
         """
@@ -485,15 +510,21 @@ class MultiBackendRouter:
         if not backend:
             return
         
+        # Record the status before pause (for resume)
+        paused_from_status = state.status.value if state.status else None
+        
         # Remove from active counts
         backend.remove_active_program(
             state.total_tokens,
             is_acting=(state.status == ProgramStatus.ACTING),
         )
         
-        # Add to global paused pool.
-        await self._add_to_global_waiting_queue(program_id, state, backend)
-        state.status = ProgramStatus.PAUSED
+        # Remove from total counts (will be re-added on resume to target backend)
+        backend.remove_total_program(state.total_tokens)
+        
+        # Add to global paused pool with original status recorded
+        self._add_to_global_waiting_queue_sync(program_id, state, backend, paused_from_status)
+        state.state = ProgramState.PAUSED
         
         # Create waiting event if needed
         if state.waiting_event is None:
@@ -503,7 +534,7 @@ class MultiBackendRouter:
         
         logger.info(f"Paused program {program_id} (tokens={state.total_tokens}, active={backend.active_program_tokens})")
 
-    def _mark_program_for_pause(self, program_id: str, state: ProgramState) -> None:
+    def _mark_program_for_pause(self, program_id: str, state: Program) -> None:
         """Mark a REASONING program for pause. It will be paused on next request.
         
         Adds the program's tokens to future_paused_tokens for capacity calculation.
@@ -517,7 +548,7 @@ class MultiBackendRouter:
         
         logger.info(f"Marked program {program_id} for pause (tokens={state.total_tokens}, future_paused={backend.future_paused_tokens})")
 
-    async def _clear_mark_and_pause(self, program_id: str, state: ProgramState) -> None:
+    def _clear_mark_and_pause(self, program_id: str, state: Program) -> None:
         """Clear the mark from a program and pause it.
         
         Called when a marked program's next request arrives.
@@ -533,39 +564,48 @@ class MultiBackendRouter:
             backend.future_paused_tokens = 0
         
         # Now actually pause the program
-        await self._pause_program(program_id, state)
+        self._pause_program(program_id, state)
 
     def _resume_program(
         self,
         program_id: str,
-        state: ProgramState,
+        state: Program,
         target_backend: Optional[BackendState] = None,
+        paused_info: Optional[PausedInfo] = None,
     ) -> None:
-        """Resume a paused program after it has been claimed from the pool."""
-        origin_backend = self.backends.get(state.backend_url)
+        """Resume a paused program after it has been claimed from the pool.
+        
+        Args:
+            program_id: The program ID
+            state: The program state
+            target_backend: Backend to resume to (may differ from origin for migration)
+            paused_info: Pause metadata containing paused_from_status
+        """
+        origin_backend = self.backends.get(state.backend_url) if state.backend_url else None
         backend = target_backend or origin_backend
         if not backend:
             return
 
-        if state.status != ProgramStatus.PAUSED:
+        if state.state != ProgramState.PAUSED:
             return
 
-        # Allow backend migration on resume and keep per-backend totals consistent.
-        if state.backend_url != backend.url:
-            if origin_backend:
-                origin_backend.remove_total_program(state.total_tokens)
-            backend.add_total_program(state.total_tokens)
-            state.backend_url = backend.url
+        # Add to target backend's total counts (was removed during pause)
+        backend.add_total_program(state.total_tokens)
+        state.backend_url = backend.url
 
-        # Add to active counts.
-        backend.add_active_program(state.total_tokens, is_acting=False)
-        state.status = ProgramStatus.REASONING
+        # Resume to ACTIVE lifecycle with ACTING status:
+        # - status stays as it was before pause (ACTING or REASONING for new programs)
+        # - If a request is waiting (via _wait_for_resume), before_request will shift to REASONING
+        # - If no request is waiting (periodic scheduler), program stays ACTING until next request
+        backend.add_active_program(state.total_tokens, is_acting=(state.status == ProgramStatus.ACTING))
+        state.state = ProgramState.ACTIVE
         
-        # Signal waiting event
+        # Signal waiting event and clear it (resume completes the pause-resume cycle)
         if state.waiting_event:
             state.waiting_event.set()
+            state.waiting_event = None
         
-        logger.info(f"Resumed program {program_id} (tokens={state.total_tokens}, active={backend.active_program_tokens})")
+        logger.info(f"Resumed program {program_id} (status={state.status.value}, tokens={state.total_tokens}, active={backend.active_program_tokens})")
 
     async def _enforce_capacity(self, backend: BackendState) -> Tuple[int, int, int]:
         """Enforce capacity constraint by pausing ACTING and marking REASONING programs.
@@ -599,7 +639,7 @@ class MultiBackendRouter:
                 break  # No more ACTING programs, move to Step 2
             
             program_id, state = acting_programs[0]
-            await self._pause_program(program_id, state)
+            self._pause_program(program_id, state)
             backend.record_pause()
             paused += 1
         
@@ -628,7 +668,7 @@ class MultiBackendRouter:
 
     async def _claim_paused_for_backend(
         self, backend: BackendState
-    ) -> Optional[Tuple[str, ProgramState, PausedInfo]]:
+    ) -> Optional[Tuple[str, Program, PausedInfo]]:
         """Claim a paused program for a backend in a lock-protected way."""
         async with self.pause_resume_lock:
             paused_programs = self._get_paused_programs_sorted(ascending=True)
@@ -638,7 +678,7 @@ class MultiBackendRouter:
             )
 
             for program_id, state, info in paused_programs:
-                if program_id not in self.programs or state.status != ProgramStatus.PAUSED:
+                if program_id not in self.programs or state.state != ProgramState.PAUSED:
                     self.global_waiting_queue.pop(program_id, None)
                     continue
                 if backend.has_capacity(extra_tokens=state.total_tokens, extra_count=1):
@@ -650,14 +690,14 @@ class MultiBackendRouter:
 
     async def _claim_specific_paused(
         self, program_id: str
-    ) -> Optional[Tuple[str, ProgramState, PausedInfo]]:
+    ) -> Optional[Tuple[str, Program, PausedInfo]]:
         """Claim a specific paused program in a lock-protected way."""
         async with self.pause_resume_lock:
             info = self.global_waiting_queue.get(program_id)
             if info is None:
                 return None
             state = self.programs.get(program_id)
-            if not state or state.status != ProgramStatus.PAUSED:
+            if not state or state.state != ProgramState.PAUSED:
                 self.global_waiting_queue.pop(program_id, None)
                 return None
             self.global_waiting_queue.pop(program_id, None)
@@ -683,8 +723,8 @@ class MultiBackendRouter:
             claim = await self._claim_paused_for_backend(backend)
             if claim is None:
                 break
-            program_id, state, _info = claim
-            self._resume_program(program_id, state, backend)
+            program_id, state, info = claim
+            self._resume_program(program_id, state, backend, paused_info=info)
             backend.record_resume()
             resumed += 1
             # Continue trying to backfill until no more candidates fit.
@@ -739,7 +779,7 @@ class MultiBackendRouter:
             acting_programs = self._get_acting_programs_sorted(backend.url, ascending=True)
             if acting_programs:
                 program_id, state = acting_programs[0]
-                await self._pause_program(program_id, state)
+                self._pause_program(program_id, state)
                 paused_count += 1
                 logger.info(f"Scheduler paused ACTING program {program_id} (tokens={state.total_tokens})")
                 continue
@@ -798,7 +838,7 @@ class MultiBackendRouter:
                     if remaining >= required:
                         # Resume to this backend
                         self.global_waiting_queue.pop(program_id, None)
-                        self._resume_program(program_id, state, target_backend=backend)
+                        self._resume_program(program_id, state, target_backend=backend, paused_info=info)
                         resumed_count += 1
                         
                         # Update remaining capacity for next iteration
@@ -808,7 +848,7 @@ class MultiBackendRouter:
             if resumed_count > 0:
                 logger.info(f"Scheduler resumed {resumed_count} programs from waiting queue")
 
-    async def _wait_for_resume(self, program_id: str, state: ProgramState, timeout: float = 1800.0) -> None:
+    async def _wait_for_resume(self, program_id: str, state: Program, timeout: float = 1800.0) -> None:
         """Wait for a paused program to be resumed.
         
         If timeout (30 min), force resume the program regardless of capacity.
@@ -823,8 +863,15 @@ class MultiBackendRouter:
             claim = await self._claim_specific_paused(program_id)
             if claim is None:
                 return
-            program_id, state, _info = claim
-            self._resume_program(program_id, state)
+            program_id, state, info = claim
+            
+            # For new programs without backend, force assign to least loaded backend
+            target_backend = None
+            if state.backend_url is None:
+                target_backend = self.select_backend_for_new_program_default()
+                logger.info(f"Force assigning new program {program_id} to {target_backend.url}")
+            
+            self._resume_program(program_id, state, target_backend=target_backend, paused_info=info)
 
     def get_program_stats(self) -> Dict[str, Any]:
         """Get statistics about all programs."""
@@ -874,62 +921,6 @@ class MultiBackendRouter:
                 return int(val)
         return None
 
-    @staticmethod
-    def extract_usage_info(payload: Any) -> Tuple[Optional[int], Optional[int], Optional[int]]:
-        """Extract usage info from the response.
-        
-        Returns:
-            (total_tokens, prompt_tokens, cached_tokens)
-            - cached_tokens is 0 if prompt_tokens_details is null or missing
-            - All None if usage is not available
-        """
-        if not isinstance(payload, dict):
-            return None, None, None
-        usage = payload.get("usage")
-        if not isinstance(usage, dict):
-            return None, None, None
-        
-        total_tokens = None
-        prompt_tokens = None
-        cached_tokens = 0  # Default to 0 if not available
-        
-        if "total_tokens" in usage:
-            val = usage.get("total_tokens")
-            if isinstance(val, (int, float)) and math.isfinite(val):
-                total_tokens = int(val)
-        
-        if "prompt_tokens" in usage:
-            val = usage.get("prompt_tokens")
-            if isinstance(val, (int, float)) and math.isfinite(val):
-                prompt_tokens = int(val)
-        
-        # Extract cached_tokens from prompt_tokens_details
-        prompt_details = usage.get("prompt_tokens_details")
-        if isinstance(prompt_details, dict):
-            ct = prompt_details.get("cached_tokens")
-            if isinstance(ct, (int, float)) and math.isfinite(ct):
-                cached_tokens = int(ct)
-        
-        return total_tokens, prompt_tokens, cached_tokens
-
-    @staticmethod
-    def filtered_headers(headers: httpx.Headers) -> Dict[str, str]:
-        """Filter out hop-by-hop headers."""
-        hop_by_hop = {"content-length", "transfer-encoding", "connection"}
-        return {k: v for k, v in headers.items() if k.lower() not in hop_by_hop}
-
-    @staticmethod
-    def remove_program_id(payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Remove program_id from payload before forwarding to vLLM."""
-        payload = payload.copy()
-        payload.pop("program_id", None)
-        if "extra_body" in payload and isinstance(payload["extra_body"], dict):
-            payload["extra_body"] = payload["extra_body"].copy()
-            payload["extra_body"].pop("program_id", None)
-            if not payload["extra_body"]:
-                del payload["extra_body"]
-        return payload
-
     async def proxy_request(
         self,
         backend: BackendState,
@@ -942,110 +933,33 @@ class MultiBackendRouter:
         """Proxy request to a specific backend.
         
         Args:
+            backend: Target backend
+            payload: Request payload
             on_usage: Callback with (total_tokens, prompt_tokens, cached_tokens)
+            on_first_token: Callback when first token is received (streaming only)
+            on_token: Callback for each token (streaming only)
         """
         url = backend.completions_url
         
-        # Remove program_id before forwarding
-        payload = self.remove_program_id(payload)
-
         if payload.get("stream"):
-            # Add stream_options to get usage info in streaming response
-            if on_usage is not None:
-                stream_options = payload.get("stream_options")
-                if stream_options is None:
-                    payload["stream_options"] = {"include_usage": True}
-                elif isinstance(stream_options, dict):
-                    stream_options.setdefault("include_usage", True)
-
-            resp_cm = self.client.stream("POST", url, json=payload)
-            resp = await resp_cm.__aenter__()
-            headers = self.filtered_headers(resp.headers)
-            status = resp.status_code
-            media_type = resp.headers.get("content-type")
-
-            async def iterator():
-                buffer = b""
-                usage_extracted = False
-                total_tokens: Optional[int] = None
-                prompt_tokens: Optional[int] = None
-                cached_tokens: int = 0
-                first_token_seen = False
-                try:
-                    async for chunk in resp.aiter_raw():
-                        buffer += chunk
-                        while b"\n\n" in buffer:
-                            event, buffer = buffer.split(b"\n\n", 1)
-                            for line in event.split(b"\n"):
-                                if not line.startswith(b"data:"):
-                                    continue
-                                data = line[5:].strip()
-                                if not data or data == b"[DONE]":
-                                    continue
-                                
-                                # Profile: track token timing
-                                if not first_token_seen:
-                                    first_token_seen = True
-                                    if on_first_token is not None:
-                                        on_first_token()
-                                if on_token is not None:
-                                    on_token()
-                                
-                                if usage_extracted:
-                                    continue
-                                try:
-                                    payload_obj = json.loads(data)
-                                except Exception:
-                                    continue
-                                tt, pt, ct = self.extract_usage_info(payload_obj)
-                                if tt is not None:
-                                    total_tokens = tt
-                                    prompt_tokens = pt
-                                    cached_tokens = ct
-                                    usage_extracted = True
-                        yield chunk
-                finally:
-                    await resp_cm.__aexit__(None, None, None)
-                    if total_tokens is not None and on_usage is not None:
-                        await on_usage(total_tokens, prompt_tokens or 0, cached_tokens)
-
-            return StreamingResponse(
-                iterator(),
-                status_code=status,
-                headers=headers,
-                media_type=media_type,
+            return await forward_streaming_request(
+                self.client,
+                url,
+                payload,
+                on_usage=on_usage,
+                on_first_token=on_first_token,
+                on_token=on_token,
             )
-
-        # Non-streaming request
-        resp = await self.client.post(url, json=payload)
-        total_tokens: Optional[int] = None
-        prompt_tokens: Optional[int] = None
-        cached_tokens: int = 0
-        try:
-            payload_obj = resp.json()
-        except Exception:
-            payload_obj = None
-        tt, pt, ct = self.extract_usage_info(payload_obj)
-        if tt is not None:
-            total_tokens = tt
-            prompt_tokens = pt
-            cached_tokens = ct
-        if total_tokens is not None and on_usage is not None:
-            await on_usage(total_tokens, prompt_tokens or 0, cached_tokens)
-        return Response(
-            content=resp.content,
-            status_code=resp.status_code,
-            headers=self.filtered_headers(resp.headers),
-            media_type=resp.headers.get("content-type"),
-        )
+        else:
+            return await forward_non_streaming_request(
+                self.client,
+                url,
+                payload,
+                on_usage=on_usage,
+            )
 
     async def proxy_get(self, backend_url: str, path: str) -> Response:
         """Proxy a GET request to a backend."""
         url = f"{backend_url.rstrip('/')}{path}"
-        resp = await self.client.get(url)
-        return Response(
-            content=resp.content,
-            status_code=resp.status_code,
-            headers=self.filtered_headers(resp.headers),
-            media_type=resp.headers.get("content-type"),
-        )
+        return await forward_get_request(self.client, url)
+
