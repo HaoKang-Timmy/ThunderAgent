@@ -19,11 +19,8 @@ METRICS_HISTORY_SIZE = 12
 # Buffer tokens reserved per program for decode phase
 DECODE_BUFFER = 512
 
-# Cooldown period (seconds) to prevent frequent pause/resume oscillation
-PAUSE_COOLDOWN = 5.0    # Wait after pausing before pausing more
-RESUME_COOLDOWN = 5.0   # Wait after resuming before resuming more
-
-TOOL_COEFFICIENT = 1.0
+# Default coefficient for acting tokens (can be overridden per backend)
+DEFAULT_TOOL_COEFFICIENT = 1.0
 
 # Buffer tokens reserved per active program (for decode headroom)
 BUFFER_PER_PROGRAM = 100
@@ -31,8 +28,9 @@ BUFFER_PER_PROGRAM = 100
 class BackendState:
     """State of a single VLLM backend with self-managed metrics monitoring."""
     
-    def __init__(self, url: str):
+    def __init__(self, url: str, tool_coefficient: float = DEFAULT_TOOL_COEFFICIENT):
         self.url = url
+        self.tool_coefficient = tool_coefficient
         self.healthy = True
         self.metrics_history: List[VLLMMetrics] = []
         
@@ -42,7 +40,7 @@ class BackendState:
         # Program token tracking
         self.reasoning_program_tokens: int = 0  # REASONING programs only
         self.acting_program_tokens: int = 0     # ACTING programs only
-        self.active_program_tokens: int = 0  # REASONING + TOOL_COEFFICIENT * ACTING
+        self.active_program_tokens: int = 0  # REASONING + self.tool_coefficient * ACTING
         self.active_program_count: int = 0    # Number of REASONING + ACTING programs
         self.total_program_tokens: int = 0    # All non-STOPPED programs (including PAUSED)
         
@@ -53,10 +51,6 @@ class BackendState:
         # Future paused tokens: sum of tokens from REASONING programs marked for pause
         # These will be released when they transition to ACTING
         self.future_paused_tokens: int = 0
-        
-        # Cooldown timestamps to prevent rapid pause/resume oscillation
-        self.last_pause_time: float = 0.0   # Last time a program was paused
-        self.last_resume_time: float = 0.0  # Last time a program was resumed
         
         # Flag to skip concurrent scheduling (non-blocking, allows temporary overflow)
         self.scheduling_in_progress: bool = False
@@ -138,22 +132,6 @@ class BackendState:
     # Cooldown Management
     # -------------------------------------------------------------------------
     
-    def can_pause(self) -> bool:
-        """Check if enough time has passed since last pause operation."""
-        return time.time() - self.last_pause_time >= PAUSE_COOLDOWN
-    
-    def can_resume(self) -> bool:
-        """Check if enough time has passed since last resume operation."""
-        return time.time() - self.last_resume_time >= RESUME_COOLDOWN
-    
-    def record_pause(self) -> None:
-        """Record that a pause operation just happened."""
-        self.last_pause_time = time.time()
-    
-    def record_resume(self) -> None:
-        """Record that a resume operation just happened."""
-        self.last_resume_time = time.time()
-    
     # -------------------------------------------------------------------------
     # Program Token Management
     # -------------------------------------------------------------------------
@@ -165,7 +143,7 @@ class BackendState:
         else:
             self.reasoning_program_tokens += tokens
         self.active_program_tokens = int(
-            self.reasoning_program_tokens + TOOL_COEFFICIENT * self.acting_program_tokens
+            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
         )
         self.active_program_count += 1
     
@@ -176,7 +154,7 @@ class BackendState:
         else:
             self.reasoning_program_tokens -= tokens
         self.active_program_tokens = int(
-            self.reasoning_program_tokens + TOOL_COEFFICIENT * self.acting_program_tokens
+            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
         )
         self.active_program_count -= 1
         if self.active_program_tokens < 0:
@@ -208,7 +186,7 @@ class BackendState:
         self.reasoning_program_tokens -= old_tokens
         self.acting_program_tokens += new_tokens
         self.active_program_tokens = int(
-            self.reasoning_program_tokens + TOOL_COEFFICIENT * self.acting_program_tokens
+            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
         )
         self.total_program_tokens += (new_tokens - old_tokens)
         if self.reasoning_program_tokens < 0:
@@ -229,7 +207,7 @@ class BackendState:
         self.acting_program_tokens -= tokens
         self.reasoning_program_tokens += tokens
         self.active_program_tokens = int(
-            self.reasoning_program_tokens + TOOL_COEFFICIENT * self.acting_program_tokens
+            self.reasoning_program_tokens + self.tool_coefficient * self.acting_program_tokens
         )
         if self.reasoning_program_tokens < 0:
             logger.warning(f"reasoning_program_tokens went negative ({self.reasoning_program_tokens}), resetting to 0")

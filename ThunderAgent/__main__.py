@@ -23,6 +23,10 @@ def main() -> int:
                         help="Enable vLLM metrics monitoring")
     parser.add_argument("--metrics-interval", type=float, default=5.0,
                         help="Interval in seconds between metrics fetches (default: 5.0)")
+    parser.add_argument("--scheduler-interval", type=float, default=5.0,
+                        help="Interval in seconds between scheduler checks (default: 5.0)")
+    parser.add_argument("--acting-token-weight", type=float, default=1.0,
+                        help="Weight for acting tokens in capacity calculation (default: 1.0)")
     args = parser.parse_args()
 
     # Set config BEFORE importing app
@@ -36,6 +40,8 @@ def main() -> int:
         profile_dir=args.profile_dir,
         metrics_enabled=args.metrics,
         metrics_interval=args.metrics_interval,
+        scheduler_interval=args.scheduler_interval,
+        acting_token_weight=args.acting_token_weight,
     )
     set_config(config)
     
@@ -45,6 +51,10 @@ def main() -> int:
     
     if args.metrics:
         print(f"📈 Metrics monitoring enabled - interval: {args.metrics_interval}s")
+    
+    if args.router == "tr":
+        print(f"⏱️  Scheduler interval: {args.scheduler_interval}s")
+        print(f"⚖️  Acting token weight: {args.acting_token_weight}")
 
     # Import uvicorn here to avoid import errors if not installed
     try:

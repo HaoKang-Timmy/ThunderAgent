@@ -23,6 +23,8 @@ def _create_router() -> MultiBackendRouter:
         config.backends, 
         profile_enabled=config.profile_enabled,
         scheduling_enabled=(config.router_mode == "tr"),
+        scheduler_interval=config.scheduler_interval,
+        acting_token_weight=config.acting_token_weight,
     )
 
 router = _create_router()
