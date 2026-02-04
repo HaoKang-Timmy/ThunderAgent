@@ -15,12 +15,14 @@ This folder contains reproducible end-to-end guides for running SWE-bench evalua
 ## Reproduction
 These scripts reproduce the results reported in our paper.
 
-Environment setup: [`setup.sh`](scripts/setup/setup.sh).
+Test hardware: 8x H100.
 
-Test hardware: 8x H100 (NVIDIA driver 580.95.05 / CUDA 13.0).
+Environment setup: [`setup.sh`](scripts/setup/setup.sh).
 
 - [`reproduce_glm4.6`](scripts/reproduce/reproduce_glm4.6): reproduce with GLM-4.6-FP8.
 - [`reproduce_qwen3_235B`](scripts/reproduce/reproduce_qwen3_235B): reproduce with Qwen3-235B-A22B.
+
+Throughput measurement: we count the total number of served LLM calls (“steps”) within a stable serving window (e.g., from 10 minutes after startup to 1 hour 10 minutes after startup), then divide by the window duration to get throughput (steps/min).
 
 Expected result (throughput comparison):
 ![throughput_compare](../docs/mini-swe-agent/figures/throughput_compare.png)
@@ -50,6 +52,8 @@ vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-cho
 python -m ThunderAgent --backends http://localhost:<VLLM_PORT> --port <TA_PORT>
 ```
 3) Configure [`swebench.yaml`](src/minisweagent/config/benchmarks/swebench.yaml) to call ThunderAgent.
+   - Set `model.model_kwargs.api_base` to `http://localhost:<TA_PORT>/v1` so mini-swe-agent sends all OpenAI-compatible requests to ThunderAgent (instead of directly to vLLM).
+   - Set `model.model_name` to your served model (for local paths, use `openai//abs/path/to/model` or pass `model_kwargs.custom_llm_provider: openai`).
 
 
 4) Run SWE-Bench via mini-swe-agent through ThunderAgent:
@@ -76,6 +80,7 @@ vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-cho
 python -m ThunderAgent --backends http://<VLLM_HOST1>:<VLLM_PORT>,http://<VLLM_HOST2>:<VLLM_PORT> --port <TA_PORT>
 ```
 3) Configure [`swebench.yaml`](src/minisweagent/config/benchmarks/swebench.yaml) to call ThunderAgent.
+   - Same as the single-node setup: point `model.model_kwargs.api_base` to `http://<TA_HOST>:<TA_PORT>/v1` and set `model.model_name` accordingly.
 
 2) Run SWE-Bench via mini-swe-agent through ThunderAgent:
 ```bash
@@ -89,14 +94,17 @@ mini-extra swebench \
 
 ### What we changed in mini-swe-agent(to reuse in your own agent workflow)
 - **Program ID injection**  
-  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py#L138) (`process_instance()`).  
+  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py#L138) (`process_instance()`), [`litellm_model.py`](src/minisweagent/models/litellm_model.py) (`litellm.completion(...)`).  
 
-  What: Assign a unique `program_id` per SWE-bench instance and pass it via `extra_body.program_id` on every model call.  
+  How it works: mini-swe-agent sends requests through `litellm.completion(...)`. By injecting `extra_body.program_id` into `model_kwargs`, we ensure the `program_id` is included in every request payload.
 
-  Why: ThunderAgent uses this field to separate requests into per-program state (see [`get_program_id()` in app.py](../../../ThunderAgent/app.py#L42)).
-
-  Implementation snippet:
   ```python
+  # src/minisweagent/models/litellm_model.py
+  litellm.completion(model=..., messages=..., tools=[...], **model_kwargs)
+  ```
+
+  ```python
+  # src/minisweagent/run/benchmarks/swebench.py
   # Create a unique program_id per SWE-bench instance and attach it to every request via extra_body.
   program_id = f"swe-{next(_PROGRAM_COUNTER):06d}"
   # Copy model config to avoid cross-thread mutation when running multiple instances in parallel.
@@ -106,12 +114,13 @@ mini-extra swebench \
   model = get_model(config=model_config)
   ```
 
+  **vLLM** vs **ThunderAgent**: the only `model_kwargs` difference we rely on is adding `extra_body.program_id=<program_id>` on every request.
+
+
 - **Program release hook**  
   Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py#L181) (`finally:`).  
 
-  What: Send `POST /programs/release` to ThunderAgent with the same `program_id` after the instance finishes.  
-
-  Why: Frees router-side bookkeeping (tokens / pause-resume state) so finished programs do not linger.
+  How it works: Send `POST /programs/release` to ThunderAgent with the same `program_id` after the instance finishes.  
 
   Implementation snippet:
   ```python
