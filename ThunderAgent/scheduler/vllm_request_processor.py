@@ -72,6 +72,10 @@ def remove_program_id(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+# Default interval for token progress updates during streaming
+DEFAULT_TOKEN_PROGRESS_INTERVAL = 20
+
+
 async def forward_streaming_request(
     client: httpx.AsyncClient,
     url: str,
@@ -80,6 +84,8 @@ async def forward_streaming_request(
     on_usage: Callable[[int, int, int], Awaitable[None]] | None = None,
     on_first_token: Callable[[], None] | None = None,
     on_token: Callable[[], None] | None = None,
+    on_token_progress: Callable[[int], None] | None = None,
+    token_progress_interval: int = DEFAULT_TOKEN_PROGRESS_INTERVAL,
 ) -> StreamingResponse:
     """Forward a streaming request to vLLM and return a StreamingResponse.
     
@@ -87,6 +93,7 @@ async def forward_streaming_request(
     - SSE (Server-Sent Events) parsing
     - Usage info extraction from the stream
     - Token timing callbacks (on_first_token, on_token)
+    - Token progress updates at regular intervals (on_token_progress)
     - Calling on_usage when stream ends
     
     Args:
@@ -96,6 +103,8 @@ async def forward_streaming_request(
         on_usage: Called with (total_tokens, prompt_tokens, cached_tokens) when stream ends
         on_first_token: Called when first token is received
         on_token: Called for each token received
+        on_token_progress: Called with cumulative token count at regular intervals
+        token_progress_interval: How often to call on_token_progress (default: 20 tokens)
     
     Returns:
         FastAPI StreamingResponse that forwards the vLLM stream to client
@@ -124,6 +133,8 @@ async def forward_streaming_request(
         prompt_tokens: Optional[int] = None
         cached_tokens: int = 0
         first_token_seen = False
+        token_count = 0  # Track cumulative generated tokens
+        last_reported_count = 0  # Last count reported via on_token_progress
         try:
             async for chunk in resp.aiter_raw():
                 buffer += chunk
@@ -143,6 +154,15 @@ async def forward_streaming_request(
                                 on_first_token()
                         if on_token is not None:
                             on_token()
+                        
+                        # Track token count and report progress at intervals
+                        token_count += 1
+                        if on_token_progress is not None:
+                            if token_count - last_reported_count >= token_progress_interval:
+                                # Report the delta (new tokens since last report)
+                                delta = token_count - last_reported_count
+                                on_token_progress(delta)
+                                last_reported_count = token_count
                         
                         # Extract usage info (only once)
                         if usage_extracted:

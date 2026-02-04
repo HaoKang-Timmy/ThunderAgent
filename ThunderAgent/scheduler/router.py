@@ -83,6 +83,11 @@ class MultiBackendRouter:
         self._scheduler_task: Optional[asyncio.Task] = None
         self._scheduler_stop = False
         self._scheduler_interval = scheduler_interval
+        
+        # Global char-to-token ratio for token estimation
+        # Initial value is 5.0 (1 token ≈ 5 chars), updated with momentum after each request
+        self.char_to_token_ratio: float = 5.0
+        self._ratio_initialized: bool = False
 
     async def start(self):
         """Start the router."""
@@ -208,10 +213,10 @@ class MultiBackendRouter:
                 profile=profile,
             )
             
-            # Estimate token count from payload
+            # Estimate token count from payload using global char_to_token_ratio
             if payload:
                 state.context_len = len(json.dumps(payload, ensure_ascii=False))
-                state.total_tokens = state.context_len // 5
+                state.total_tokens = int(state.context_len / self.char_to_token_ratio)
             
             self.programs[program_id] = state
             logger.debug(f"Created program {program_id} (estimated tokens={state.total_tokens})")
@@ -270,9 +275,12 @@ class MultiBackendRouter:
         state.step_count += 1
         is_new_program = state.step_count == 1
         
-        # Update context_len (for non-new programs, context grows with each request)
+        # Update context_len and estimate total_tokens using char_to_token_ratio
         if not is_new_program:
             state.context_len = len(json.dumps(payload, ensure_ascii=False))
+            # Estimate tokens for this request using the global ratio
+            estimated_tokens = int(state.context_len / self.char_to_token_ratio)
+            state.total_tokens = estimated_tokens
         # Note: For new programs, total_tokens was already estimated in get_or_create_program
         
         # ---------------------------------------------------------------------
@@ -343,14 +351,37 @@ class MultiBackendRouter:
         state.status = ProgramStatus.REASONING
         return True
 
-    def update_program_after_request(self, program_id: str, state: Program, total_tokens: int) -> None:
+    def update_program_after_request(
+        self, program_id: str, state: Program, total_tokens: int, prompt_tokens: int = 0
+    ) -> None:
         """Update program state after receiving response from vLLM.
         
         Transitions to ACTING (off GPU, executing tool).
         Updates token counts. If marked for pause, pause immediately.
+        Also updates the global char_to_token_ratio for future token estimation.
+        
+        Args:
+            program_id: The program ID
+            state: The program state
+            total_tokens: Total tokens from vLLM response (prompt + completion)
+            prompt_tokens: Prompt/prefill tokens from vLLM response
         """
         # Transition to ACTING
         state.status = ProgramStatus.ACTING
+        
+        # Update global char_to_token_ratio based on actual prefill
+        # ratio = context_len / prompt_tokens (chars per token)
+        if prompt_tokens > 0 and state.context_len > 0:
+            current_ratio = state.context_len / prompt_tokens
+            if not self._ratio_initialized:
+                # First request: directly assign
+                self.char_to_token_ratio = current_ratio
+                self._ratio_initialized = True
+                logger.debug(f"Initialized char_to_token_ratio={self.char_to_token_ratio:.2f}")
+            else:
+                # Subsequent requests: momentum update (0.2 new + 0.8 old)
+                self.char_to_token_ratio = 0.2 * current_ratio + 0.8 * self.char_to_token_ratio
+                logger.debug(f"Updated char_to_token_ratio={self.char_to_token_ratio:.2f} (sample={current_ratio:.2f})")
         
         backend = self.backends.get(state.backend_url)
         if not backend:
@@ -365,6 +396,31 @@ class MultiBackendRouter:
         # If marked for pause, pause now (while in ACTING state)
         if state.marked_for_pause:
             self._clear_mark_and_pause(program_id, state)
+
+    def update_program_tokens_streaming(self, state: Program, delta_tokens: int) -> None:
+        """Update program tokens incrementally during streaming.
+        
+        Called periodically (e.g., every 20 tokens) during streaming to 
+        update the token counts in real-time. The program is in REASONING
+        state during streaming.
+        
+        Args:
+            state: The program state
+            delta_tokens: Number of new tokens since last update
+        """
+        backend = self.backends.get(state.backend_url)
+        if not backend:
+            state.total_tokens += delta_tokens
+            return
+        
+        # Program is in REASONING state during streaming, update reasoning tokens
+        state.total_tokens += delta_tokens
+        backend.reasoning_program_tokens += delta_tokens
+        backend.total_program_tokens += delta_tokens
+        # Recalculate active_program_tokens
+        backend.active_program_tokens = int(
+            backend.reasoning_program_tokens + backend.tool_coefficient * backend.acting_program_tokens
+        )
 
     async def release_program(self, program_id: str) -> bool:
         """Stop a program and release its resources.
@@ -835,6 +891,7 @@ class MultiBackendRouter:
         on_usage: Callable[[int, int, int], Awaitable[None]] | None = None,
         on_first_token: Callable[[], None] | None = None,
         on_token: Callable[[], None] | None = None,
+        on_token_progress: Callable[[int], None] | None = None,
     ) -> Response:
         """Proxy request to a specific backend.
         
@@ -844,6 +901,7 @@ class MultiBackendRouter:
             on_usage: Callback with (total_tokens, prompt_tokens, cached_tokens)
             on_first_token: Callback when first token is received (streaming only)
             on_token: Callback for each token (streaming only)
+            on_token_progress: Callback with delta token count at intervals (streaming only)
         """
         url = backend.completions_url
         
@@ -855,6 +913,7 @@ class MultiBackendRouter:
                 on_usage=on_usage,
                 on_first_token=on_first_token,
                 on_token=on_token,
+                on_token_progress=on_token_progress,
             )
         else:
             return await forward_non_streaming_request(
