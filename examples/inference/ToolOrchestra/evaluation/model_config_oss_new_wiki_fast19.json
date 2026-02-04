@@ -1,0 +1,50 @@
+{
+  "_comment": "model_config_oss_new.json but with wiki_retrieval pointing to the optimized GPU-FAISS retriever on research-secure-19:8766 (job 13502)",
+  "vllm_model_config_path": "/home/junxiong/haokang/ToolOrchestra/evaluation/model_config_oss_new_wiki_fast19.json",
+
+  "/home/junxiong/haokang/ckpt/nvidia/Nemotron-Orchestrator-8B/": [
+    { "ip_addr": "research-secure-05", "port": 1800 },
+    { "ip_addr": "research-secure-05", "port": 1801 },
+    { "ip_addr": "research-secure-05", "port": 1802 },
+    { "ip_addr": "research-secure-05", "port": 1803 }
+  ],
+
+  "openai/gpt-oss-20b": [
+    { "ip_addr": "172.27.31.10", "port": 1840 },
+    { "ip_addr": "172.27.31.10", "port": 1841 },
+    { "ip_addr": "172.27.31.10", "port": 1842 },
+    { "ip_addr": "172.27.31.10", "port": 1843 }
+  ],
+
+  "Qwen/Qwen2.5-Coder-14B-Instruct": [
+    { "ip_addr": "research-secure-11", "port": 1810 },
+    { "ip_addr": "research-secure-11", "port": 1811 },
+    { "ip_addr": "research-secure-11", "port": 1812 },
+    { "ip_addr": "research-secure-11", "port": 1813 },
+    { "ip_addr": "research-secure-11", "port": 1814 },
+    { "ip_addr": "research-secure-11", "port": 1815 },
+    { "ip_addr": "research-secure-11", "port": 1816 },
+    { "ip_addr": "research-secure-11", "port": 1817 }
+  ],
+
+  "Qwen/Qwen3-32B-FP8": [
+    { "ip_addr": "research-secure-12", "port": 1820 },
+    { "ip_addr": "research-secure-12", "port": 1821 },
+    { "ip_addr": "research-secure-12", "port": 1822 },
+    { "ip_addr": "research-secure-12", "port": 1823 },
+    { "ip_addr": "research-secure-12", "port": 1824 },
+    { "ip_addr": "research-secure-12", "port": 1825 },
+    { "ip_addr": "research-secure-12", "port": 1826 },
+    { "ip_addr": "research-secure-12", "port": 1827 }
+  ],
+
+  "retrieval": [
+    { "ip_addr": "research-secure-13", "port": 8765 }
+  ],
+
+  "wiki_retrieval": [
+    { "ip_addr": "research-secure-19", "port": 8766 }
+  ]
+}
+
+

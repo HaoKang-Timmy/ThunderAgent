@@ -1,0 +1,21 @@
+{
+  "/home/junxiong/haokang/ckpt/nvidia/Nemotron-Orchestrator-8B/": [
+    {
+      "ip_addr": "127.0.0.1",
+      "port": "1900"
+    },
+    {
+      "ip_addr": "127.0.0.1",
+      "port": "1901"
+    },
+    {
+      "ip_addr": "127.0.0.1",
+      "port": "1902"
+    },
+    {
+      "ip_addr": "127.0.0.1",
+      "port": "1903"
+    }
+  ],
+  "vllm_model_config_path": "model_config_local.json"
+}
