@@ -194,7 +194,7 @@ class MultiBackendRouter:
         text = "\n".join(parts)
         return max(0, len(text) // 5)
 
-    def get_or_create_program(self, program_id: str, payload: Dict[str, Any] = None) -> Program:
+    def get_or_create_program(self, program_id: str) -> Program:
         """Get existing program or create new one.
         
         Only creates the program and estimates token count.

@@ -33,6 +33,7 @@ class ProgramState(Enum):
 @dataclass
 class Program:
     """A single program (task) with its status and state."""
+    program_id: str
     backend_url: Optional[str] = None  # Which backend this program is assigned to (None if paused/waiting)
     origin_backend: Optional[str] = None  # Backend URL before pause (for resume fallback)
     status: ProgramStatus = ProgramStatus.ACTING  # What the program is doing (reasoning/acting)
