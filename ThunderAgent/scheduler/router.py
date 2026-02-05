@@ -747,7 +747,18 @@ class MultiBackendRouter:
             for program_id, state, info in ordered_waiting:
                 # Find a backend that can fit this program
                 for i, (backend, remaining) in enumerate(backends_with_capacity):
-                    required = state.total_tokens + BUFFER_PER_PROGRAM
+                    # Calculate future reasoning count after resume
+                    # New program (step=1) or REASONING programs will be in REASONING state
+                    will_be_reasoning = (state.step_count == 1 or info.paused_from_status == "reasoning")
+                    future_reasoning_count = backend.reasoning_program_count
+                    if will_be_reasoning:
+                        future_reasoning_count += 1
+                    
+                    # Reserve space for all REASONING programs' decode buffer
+                    # required = program_tokens + buffer_for_new_program + reserved_for_reasoning_decode
+                    reserved_for_reasoning = future_reasoning_count * BUFFER_PER_PROGRAM
+                    required = state.total_tokens + BUFFER_PER_PROGRAM + reserved_for_reasoning
+                    
                     if remaining >= required:
                         # Resume to this backend
                         self.global_waiting_queue.pop(program_id, None)
@@ -755,7 +766,7 @@ class MultiBackendRouter:
                         resumed_count += 1
                         
                         # Update remaining capacity for next iteration
-                        backends_with_capacity[i] = (backend, remaining - required)
+                        backends_with_capacity[i] = (backend, remaining - (state.total_tokens + BUFFER_PER_PROGRAM))
                         break
             
             if resumed_count > 0:
