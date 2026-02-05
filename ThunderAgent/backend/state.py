@@ -1,6 +1,6 @@
 """Backend state management."""
 import logging
-from typing import Optional, Set, TYPE_CHECKING
+from typing import Optional, Dict, TYPE_CHECKING
 
 from .vllm_metrics import VLLMMetricsClient
 
@@ -34,8 +34,9 @@ class BackendState:
         # vLLM metrics client (handles all vLLM communication)
         self.metrics_client = VLLMMetricsClient(url)
         
-        # Program tracking - all token stats are computed from this set
-        self._programs: Set["Program"] = set()
+        # Program tracking - all token stats are computed from this dict
+        # Key is program_id (str), value is Program object
+        self._programs: Dict[str, "Program"] = {}
         
         # Shared tokens (prefix cache savings), updated only during thrashing check
         # = reasoning_program_tokens - vllm_actual_used_tokens
@@ -77,13 +78,13 @@ class BackendState:
     @property
     def reasoning_program_tokens(self) -> int:
         """Sum of tokens from all REASONING programs."""
-        return sum(p.total_tokens for p in self._programs 
+        return sum(p.total_tokens for p in self._programs.values() 
                    if p.status == ProgramStatus.REASONING)
     
     @property
     def acting_program_tokens(self) -> int:
         """Sum of tokens from all ACTING programs."""
-        return sum(p.total_tokens for p in self._programs 
+        return sum(p.total_tokens for p in self._programs.values() 
                    if p.status == ProgramStatus.ACTING)
     
     @property
@@ -97,9 +98,19 @@ class BackendState:
         return len(self._programs)
     
     @property
+    def reasoning_program_count(self) -> int:
+        """Number of REASONING programs."""
+        return sum(1 for p in self._programs.values() if p.status == ProgramStatus.REASONING)
+    
+    @property
+    def acting_program_count(self) -> int:
+        """Number of ACTING programs."""
+        return sum(1 for p in self._programs.values() if p.status == ProgramStatus.ACTING)
+    
+    @property
     def total_program_tokens(self) -> int:
         """Sum of tokens from all programs on this backend."""
-        return sum(p.total_tokens for p in self._programs)
+        return sum(p.total_tokens for p in self._programs.values())
     
     def update_shared_tokens(self) -> None:
         """Update shared_tokens from latest vLLM metrics.
@@ -172,17 +183,17 @@ class BackendState:
     # Program Registration
     # -------------------------------------------------------------------------
     
-    def register_program(self, program: "Program") -> None:
+    def register_program(self, program_id: str, program: "Program") -> None:
         """Register a program with this backend.
         
         All token stats (reasoning_program_tokens, acting_program_tokens, etc.)
         are computed from the registered programs.
         """
-        self._programs.add(program)
+        self._programs[program_id] = program
     
-    def unregister_program(self, program: "Program") -> None:
+    def unregister_program(self, program_id: str) -> None:
         """Unregister a program from this backend."""
-        self._programs.discard(program)
+        self._programs.pop(program_id, None)
     
     # -------------------------------------------------------------------------
     # Metrics Monitoring (delegated to metrics_client)
@@ -200,6 +211,10 @@ class BackendState:
         """Fetch metrics from vLLM."""
         return await self.metrics_client.fetch_metrics()
     
+    async def fetch_cache_config(self) -> bool:
+        """Fetch cache config from vLLM."""
+        return await self.metrics_client.fetch_cache_config()
+    
     def to_dict(self, *, paused_program_count: Optional[int] = None) -> dict:
         """Convert to dict for API response."""
         if paused_program_count is None:
@@ -212,6 +227,8 @@ class BackendState:
             "reasoning_program_tokens": self.reasoning_program_tokens,
             "acting_program_tokens": self.acting_program_tokens,
             "active_program_count": self.active_program_count,
+            "reasoning_program_count": self.reasoning_program_count,
+            "acting_program_count": self.acting_program_count,
             "active_program_tokens_ratio": round(self.active_program_tokens_ratio, 4),
             "total_program_tokens": self.total_program_tokens,
             "paused_program_count": paused_program_count,

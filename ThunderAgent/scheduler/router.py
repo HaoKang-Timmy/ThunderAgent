@@ -207,6 +207,7 @@ class MultiBackendRouter:
         if program_id not in self.programs:
             profile = ProfileState(program_id=program_id) if self.profile_enabled else None
             state = Program(
+                program_id=program_id,
                 backend_url=None,
                 status=ProgramStatus.REASONING,  # Request arrived, program is reasoning
                 state=ProgramState.ACTIVE,
@@ -285,7 +286,7 @@ class MultiBackendRouter:
                 state.backend_url = backend.url
             
             if is_new_program:
-                backend.register_program(state)
+                backend.register_program(program_id, state)
             # Status change is enough - token stats are computed from program status
             state.status = ProgramStatus.REASONING
             return True
@@ -311,7 +312,7 @@ class MultiBackendRouter:
                 # Direct assignment: register program with backend
                 state.backend_url = backend_url
                 backend = self.backends[backend_url]
-                backend.register_program(state)
+                backend.register_program(program_id, state)
                 logger.debug(f"Assigned new program {program_id} to {backend_url}")
                 state.status = ProgramStatus.REASONING
                 return True
@@ -407,7 +408,7 @@ class MultiBackendRouter:
             if state.waiting_event:
                 state.waiting_event.set()  # Unblock any waiting coroutine
         elif backend and state.state == ProgramState.ACTIVE:
-            backend.unregister_program(state)
+            backend.unregister_program(program_id)
         
         # Clear mark if was marked
         if backend and state.marked_for_pause:
@@ -522,7 +523,7 @@ class MultiBackendRouter:
         paused_from_status = state.status.value if state.status else None
         
         # Unregister from backend
-        backend.unregister_program(state)
+        backend.unregister_program(program_id)
         
         # Add to global paused pool with original status recorded
         self._add_to_global_waiting_queue_sync(program_id, state, backend, paused_from_status)
@@ -599,7 +600,7 @@ class MultiBackendRouter:
             return
 
         # Register with target backend
-        backend.register_program(state)
+        backend.register_program(program_id, state)
         state.backend_url = backend.url
         state.origin_backend = None  # Clear origin_backend after resume
         state.state = ProgramState.ACTIVE

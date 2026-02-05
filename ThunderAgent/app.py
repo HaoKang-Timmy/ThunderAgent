@@ -109,6 +109,7 @@ async def list_programs():
             "total_tokens": state.total_tokens,
             "step_count": state.step_count,
             "status": state.status.value,
+            "state": state.state.value,
         }
         # Include profile data if available
         if state.profile:
