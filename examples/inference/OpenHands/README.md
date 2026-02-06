@@ -18,8 +18,21 @@ Test hardware: 8x H100.
 
 Environment setup: [`setup.sh`](scripts/setup/setup.sh).
 
-- [`reproduce_glm4.6`](scripts/reproduce/reproduce_glm4.6): reproduce with GLM-4.6-FP8.
-- [`reproduce_qwen3_235B`](scripts/reproduce/reproduce_qwen3_235B): reproduce with Qwen3-235B-A22B-Instruct-2507.
+- [`reproduce_glm4.6`](scripts/reproduce/reproduce_glm4.6.sh): reproduce with GLM-4.6-FP8.
+- [`reproduce_qwen3_235B`](scripts/reproduce/reproduce_qwen3_235B.sh): reproduce with Qwen3-235B-A22B-Instruct-2507.
+
+Before running reproduction scripts, make sure to update:
+- `HF_HOME` in the selected script (this is where model weights are downloaded/cached).
+- `model` in [`config.toml`](config.toml) (e.g. in `[llm.vllm_local]`) to the model you want to reproduce (default: `zai-org/GLM-4.6-FP8`).
+
+Run from repository root (`ThunderAgent/`):
+```bash
+cd ThunderAgent
+source examples/inference/OpenHands/scripts/setup/setup.sh
+bash examples/inference/OpenHands/scripts/reproduce/reproduce_glm4.6.sh
+# or
+bash examples/inference/OpenHands/scripts/reproduce/reproduce_qwen3_235B.sh
+```
 
 Throughput measurement: we count the total number of served LLM calls ("steps") within a stable serving window (e.g., from 10 minutes after startup to 1 hour 10 minutes after startup), then divide by the window duration to get throughput (steps/min).
 
@@ -35,6 +48,7 @@ source .venv/bin/activate
 # Install vLLM (GPU build) and OpenHands (code) in editable mode
 uv pip install vllm --torch-backend=auto
 uv pip install -e examples/inference/OpenHands
+uv pip install huggingface_hub
 ```
 
 ## How to run the experiment yourself
@@ -42,12 +56,12 @@ uv pip install -e examples/inference/OpenHands
 ### One node example
 1) Start vLLM to serve the model:
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --port <VLLM_PORT>
 ```
 
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backends http://localhost:<VLLM_PORT> --port <TA_PORT>
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metrics --profile
 ```
 
 3) Configure `examples/inference/OpenHands/config.toml`.
@@ -73,16 +87,16 @@ python -m evaluation.benchmarks.swe_bench.run_infer \
 ### Multi nodes example
 1) Start vLLM to serve the model:
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --host 0.0.0.0 --port <VLLM_PORT>
 ```
 
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --host 0.0.0.0 --port <VLLM_PORT>
 ```
 
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backends http://<VLLM_HOST1>:<VLLM_PORT>,http://<VLLM_HOST2>:<VLLM_PORT> --port <TA_PORT>
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metrics --profile
 ```
 
 3) Configure `examples/inference/OpenHands/config.toml`.

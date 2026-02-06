@@ -19,8 +19,21 @@ Test hardware: 8x H100.
 
 Environment setup: [`setup.sh`](scripts/setup/setup.sh).
 
-- [`reproduce_glm4.6`](scripts/reproduce/reproduce_glm4.6): reproduce with GLM-4.6-FP8.
-- [`reproduce_qwen3_235B`](scripts/reproduce/reproduce_qwen3_235B): reproduce with Qwen3-235B-A22B.
+- [`reproduce_glm4.6`](scripts/reproduce/reproduce_glm4.6.sh): reproduce with GLM-4.6-FP8.
+- [`reproduce_qwen3_235B`](scripts/reproduce/reproduce_qwen3_235B.sh): reproduce with Qwen3-235B-A22B.
+
+Before running reproduction scripts, make sure to update:
+- `HF_HOME` in the selected script (this is where model weights are downloaded/cached).
+- `model.model_name` in [`swebench.yaml`](src/minisweagent/config/extra/swebench.yaml) to the model you want to reproduce (default: `zai-org/GLM-4.6-FP8`).
+
+Run from repository root (`ThunderAgent/`):
+```bash
+cd ThunderAgent
+source examples/inference/mini-swe-agent/scripts/setup/setup.sh
+bash examples/inference/mini-swe-agent/scripts/reproduce/reproduce_glm4.6.sh
+# or
+bash examples/inference/mini-swe-agent/scripts/reproduce/reproduce_qwen3_235B.sh
+```
 
 Throughput measurement: we count the total number of served LLM calls (“steps”) within a stable serving window (e.g., from 10 minutes after startup to 1 hour 10 minutes after startup), then divide by the window duration to get throughput (steps/min).
 
@@ -37,7 +50,7 @@ source .venv/bin/activate
 # Install vLLM (GPU build), mini-swe-agent in editable mode, and datasets
 uv pip install vllm --torch-backend=auto
 uv pip install -e examples/inference/mini-swe-agent
-uv pip install datasets
+uv pip install datasets huggingface_hub
 ```
 
 ## How to run the experiment yourself
@@ -49,7 +62,7 @@ vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --port <VLLM_PORT>
 ```
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metircs --profile
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metrics --profile
 ```
 3) Configure [`swebench.yaml`](src/minisweagent/config/extra/swebench.yaml) to call ThunderAgent.
    - Set `model.model_kwargs.api_base` to `http://localhost:<TA_PORT>/v1` so mini-swe-agent sends all OpenAI-compatible requests to ThunderAgent (instead of directly to vLLM).
@@ -76,7 +89,7 @@ vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --host 0.0.0.0 --port 
 
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metircs --profile
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metrics --profile
 ```
 1) Configure [`swebench.yaml`](src/minisweagent/config/extra/swebench.yaml) to call ThunderAgent.
    - Same as the single-node setup: point `model.model_kwargs.api_base` to `http://<TA_HOST>:<TA_PORT>/v1` and set `model.model_name` accordingly.

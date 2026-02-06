@@ -8,7 +8,7 @@ set -euo pipefail
 # User-facing configuration
 # =========================
 # Required: fill this path before running.
-HF_HOME="/path/to/hf_cache"
+HF_HOME=""
 
 # Model
 MODEL_REPO="zai-org/GLM-4.6-FP8"
@@ -18,7 +18,7 @@ MODEL_DIR="${HF_HOME}/models/glm-4.6-fp8"
 VLLM_PORT="8100"
 TA_PORT="8000"
 VLLM_TP_SIZE="8"
-HEALTH_TIMEOUT_S="600"
+HEALTH_TIMEOUT_S="1800"
 
 # SWE-bench run
 SWEBENCH_SUBSET="lite"
@@ -104,6 +104,26 @@ prepare_model_dir() {
   mkdir -p "${MODEL_DIR}"
 }
 
+download_model() {
+  log_info "Downloading model snapshot to: ${MODEL_DIR}"
+  HF_HOME="${HF_HOME}" MODEL_REPO="${MODEL_REPO}" MODEL_DIR="${MODEL_DIR}" python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+repo_id = os.environ["MODEL_REPO"]
+local_dir = os.environ["MODEL_DIR"]
+
+snapshot_download(
+    repo_id=repo_id,
+    repo_type="model",
+    local_dir=local_dir,
+    local_dir_use_symlinks=False,
+    resume_download=True,
+)
+PY
+  log_info "Model download completed."
+}
+
 start_vllm() {
   log_info "Starting vLLM on port ${VLLM_PORT} (log: ${VLLM_LOG})"
   nohup vllm serve "${MODEL_REPO}" \
@@ -124,7 +144,7 @@ start_thunderagent() {
   nohup python -m ThunderAgent \
     --backends "http://localhost:${VLLM_PORT}" \
     --port "${TA_PORT}" \
-    --metircs \
+    --metrics \
     --profile \
     --profile-dir "${ROUTER_DIR}" \
     >"${TA_LOG}" 2>&1 &
@@ -145,17 +165,18 @@ run_swebench() {
 
 main() {
   [[ -n "${HF_HOME}" ]] || die "HF_HOME is required. Edit HF_HOME at the top of this script."
-  [[ "${HF_HOME}" != "/path/to/hf_cache" ]] || die "Please edit HF_HOME at the top of this script."
   [[ -d "./examples/inference/mini-swe-agent" ]] || die "Please run from repository root."
 
   require_cmd vllm
   require_cmd curl
   require_cmd mini-extra
+  require_cmd python
 
   mkdir -p "${LOG_DIR}"
   mkdir -p "${ROUTER_DIR}"
 
   prepare_model_dir
+  download_model
   start_vllm
   start_thunderagent
   run_swebench
