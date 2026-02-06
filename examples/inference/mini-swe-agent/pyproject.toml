@@ -1,281 +1,184 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+patch.txt
+exit_statuses*.yaml
+preds.json
+*.traj.json
+.env
+traj.json
 
+# Created by https://www.toptal.com/developers/gitignore/api/python
+# Edit at https://www.toptal.com/developers/gitignore?templates=python
 
-[project]
-name = "mini-swe-agent"
-dynamic = ["version"]
-description = "Nano SWE Agent - A simple AI software engineering agent"
-readme = "README.md"
-requires-python = ">=3.10"
-license = {file = "LICENSE.md"}
-keywords = ["nlp", "agents", "code"]
-authors = [
-    {name = "Kilian Lieret", email = "kilian.lieret@posteo.de" },
-    {name = "Carlos E. Jimenez", email = "carlosej@princeton.edu" },
-]
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Classifiers help users find your project by categorizing it.
-classifiers = [
-  # How mature is this project? Common values are
-  #   3 - Alpha, 4 - Beta, 5 - Production/Stable
-  "Development Status :: 3 - Alpha",
-  "Operating System :: OS Independent",
-  # Indicate who your project is intended for
-  "Intended Audience :: Developers",
-  # Pick your license as you wish
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3 :: Only",
-]
+# C extensions
+*.so
 
-dependencies = [
-    "pyyaml",
-    "requests",
-    "jinja2",
-    "pydantic >= 2.0",  # v2 required for safe mutable default arguments
-    "litellm >= 1.75.5",  # want to have gpt-5 support
-    "tenacity",
-    "rich",
-    "python-dotenv",
-    "typer",
-    "platformdirs",
-    "textual",
-    "prompt_toolkit",
-    "datasets",
-    "openai != 1.100.0,!=1.100.1",  # https://github.com/SWE-agent/mini-swe-agent/issues/446
-]
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-[project.optional-dependencies]
-full = [
-    "mini-swe-agent[dev]",
-    "swe-rex>=1.4.0",
-    "mini-swe-agent[modal]",
-]
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
 
-modal = [
-    "modal",
-    "boto3",
-]
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-dev = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "pytest-xdist",
-    "pre-commit",
-    "ruff",
-    "mkdocs-include-markdown-plugin",
-    "mkdocstrings[python]>=0.18",
-    "mike",
-    "mkdocs-material",
-    "mkdocs-glightbox",
-    "mkdocs-redirects",
-    "portkey-ai",
-    "swe-rex",
-]
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
 
-[project.urls]
-Documentation = "https://mini-swe-agent.com/latest/"
-Repository = "https://github.com/SWE-agent/mini-SWE-agent"
-"Bug Tracker" = "https://github.com/SWE-agent/mini-SWE-agent/issues"
+# Translations
+*.mo
+*.pot
 
-[project.scripts]
-mini = "minisweagent.run.mini:app"
-mini-swe-agent = "minisweagent.run.mini:app"
-mini-extra = "minisweagent.run.utilities.mini_extra:main"
-mini-e= "minisweagent.run.utilities.mini_extra:main"
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
-[tool.setuptools]
-include-package-data = true
+# Flask stuff:
+instance/
+.webassets-cache
 
-[tool.setuptools.dynamic]
-version = {attr = "minisweagent.__version__"}
+# Scrapy stuff:
+.scrapy
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["minisweagent*"]
+# Sphinx documentation
+docs/_build/
 
-[tool.setuptools.package-data]
-minisweagent = ["config/**/*"]
+# PyBuilder
+.pybuilder/
+target/
 
-[tool.ruff]
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".hg",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pyenv",
-    ".pytest_cache",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    ".vscode",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "site-packages",
-    "venv",
-    # ---- project specific ----
-    "tests/test_data",
-    # Exclude commands so they don't get the __future__ imports
-    "config/commands",
-]
+# Jupyter Notebook
+.ipynb_checkpoints
 
-line-length = 120
-indent-width = 4
+# IPython
+profile_default/
+ipython_config.py
 
-target-version = "py310"
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
 
-[tool.ruff.lint]
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-# I001: Isort, I002: required import
-select = [
-    # Error (E)
-    "E",
-    # Error (PLE)
-    "PLE",
-    # pycodestyle
-    "E713",  # not in
-    "E714",  # is not
-    "E711",  # comparison with None
-    # pyflakes
-    "F821",
-    "F822",
-    "F401",  # unused-import
-    "F841",  # unused var
-    "F541",  # f-string without args
-    "F901",  # raise NotImplemented should be raise NotImplementedError
-    # isort
-    "I001",  # isort
-    "I002",  # required import
-    # pyupgrade and related
-    "UP",    # pyupgrade
-    "C401",  # flake8-comprehensions: unnecessary-generator-set
-    "C402",  # flake8-comprehensions: unnecessary-generator-dict
-    "C403",  # flake8-comprehensions: unnecessary-list-comprehension-set
-    "C404",  # flake8-comprehensions: unnecessary-list-comprehension-dict
-    "C405",  # flake8-comprehensions: unnecessary-literal-set
-    "F632",  # pyflakes: is-literal
-    "W605",  # pycodestyle: invalid-escape-sequence
-    # bugbear
-    "B006",  # mutable default
-    "B007",  # unused loop var
-    "B009",  # getattr with constant
-    # flake8-errmsg
-    "EM",
-    # flake8-return
-    "RET",
-    # RUF
-    "RUF019",  # unneded key in dict check
-    # pytest
-    "PT",
-    # flake8-simplify (SIM)
-    "SIM201",
-    # flake8-use-pathlib
-    "PTH100",
-    "PTH110",
-    "PTH111",
-    "PTH112",
-    "PTH113",
-    "PTH114",
-    "PTH117",
-    "PTH118",
-    "PTH119",
-    "PTH120",
-    "PTH121",
-    "PTH122",
-    "PTH202",
-    "PTH203",
-    "PTH204",
-    "PTH205",
-]
-ignore = [
-    # flake8-return
-    "RET505",  # can't autofix
-    "RET506",  # can't autofix
-    "RET507",  # can't autofix
-    # error (E)
-    "E501",    # line too long
-    "E402",    # import not on top of file
-    "E722",    # bare except
-    "E741",    # ambiguous symbol
-    # pytest
-    "PT011",
-    "PT018",
-    # flake8-errmsg
-    "EM101",   # exception must not use a string literal
-    "EM102",   # exception must not use an f-string literal
-    "EM103",   # exception must not use a .format(...) string directly
-]
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
 
-# Allow fix for all enabled rules (when `--fix`) is provided.
-fixable = ["ALL"]
-unfixable = []
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
 
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
 
-[tool.ruff.format]
-# Like Black, use double quotes for strings.
-quote-style = "double"
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
 
-# Like Black, indent with spaces, rather than tabs.
-indent-style = "space"
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
 
-# Like Black, respect magic trailing commas.
-skip-magic-trailing-comma = false
+# SageMath parsed files
+*.sage.py
 
-# Like Black, automatically detect the appropriate line ending.
-line-ending = "auto"
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-[tool.typos.default.extend-identifiers]
-# *sigh* this just isn't worth the cost of fixing
-ACI = "ACI"
+# Spyder project settings
+.spyderproject
+.spyproject
 
-[tool.typos.default.extend-words]
-# Don't correct the surname "Teh"
-aci = "aci"
-ba = "ba"
+# Rope project settings
+.ropeproject
 
-[tool.pylint.messages_control]
-disable = [
-    "line-too-long",           # C0301 - disable line length checks
-    "missing-docstring",       # C0111 - disable docstring requirements
-    "missing-class-docstring", # C0115 - disable class docstring requirements
-    "missing-function-docstring", # C0116 - disable function docstring requirements
-    "missing-module-docstring", # C0114 - disable module docstring requirements
-    "unspecified-encoding",    # W1514 - disable unspecified encoding warnings
-    "duplicate-code",          # R0801 - disable code duplication checks
-    "too-few-public-methods",  # R0903 - disable too few public methods warnings
-]
+# mkdocs documentation
+/site
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-markers = [
-    "slow: marks tests as slow (deselect with '-k \"not slow\"')",
-]
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-[dependency-groups]
-dev = [
-    "datasets>=4.5.0",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-    "pytest-cov>=7.0.0",
-]
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+### Python Patch ###
+# Poetry local configuration file - https://python-poetry.org/docs/configuration/#local-configuration
+poetry.toml
+
+# ruff
+.ruff_cache/
+
+# LSP config files
+pyrightconfig.json
+
+# End of https://www.toptal.com/developers/gitignore/api/python
+

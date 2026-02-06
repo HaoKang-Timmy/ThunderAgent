@@ -45,15 +45,14 @@ uv pip install datasets
 ### One node example
 1) Start vLLM to serve the model:
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --port <VLLM_PORT>
 ```
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backends http://localhost:<VLLM_PORT> --port <TA_PORT>
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metircs --profile
 ```
-3) Configure [`swebench.yaml`](src/minisweagent/config/benchmarks/swebench.yaml) to call ThunderAgent.
+3) Configure [`swebench.yaml`](src/minisweagent/config/extra/swebench.yaml) to call ThunderAgent.
    - Set `model.model_kwargs.api_base` to `http://localhost:<TA_PORT>/v1` so mini-swe-agent sends all OpenAI-compatible requests to ThunderAgent (instead of directly to vLLM).
-   - Set `model.model_name` to your served model (for local paths, use `openai//abs/path/to/model` or pass `model_kwargs.custom_llm_provider: openai`).
 
 
 4) Run SWE-Bench via mini-swe-agent through ThunderAgent:
@@ -68,18 +67,18 @@ mini-extra swebench \
 ### Multi nodes example
 1) Start vLLM to serve the model:
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --host 0.0.0.0 --port <VLLM_PORT>
 ```
 
 ```bash
-vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --enable-auto-tool-choice --tool-call-parser <TOOL_PARSER> --host 0.0.0.0 --port <VLLM_PORT>
+vllm serve <MODEL_NAME> --tensor-parallel-size <NUM_GPUS> --host 0.0.0.0 --port <VLLM_PORT>
 ```
 
 2) Start ThunderAgent (pointing at your vLLM backend):
 ```bash
-python -m ThunderAgent --backends http://<VLLM_HOST1>:<VLLM_PORT>,http://<VLLM_HOST2>:<VLLM_PORT> --port <TA_PORT>
+python -m ThunderAgent --backend-type vllm --backends http://localhost:<VLLM_PORT> --port <TA_PORT> --metircs --profile
 ```
-3) Configure [`swebench.yaml`](src/minisweagent/config/benchmarks/swebench.yaml) to call ThunderAgent.
+1) Configure [`swebench.yaml`](src/minisweagent/config/extra/swebench.yaml) to call ThunderAgent.
    - Same as the single-node setup: point `model.model_kwargs.api_base` to `http://<TA_HOST>:<TA_PORT>/v1` and set `model.model_name` accordingly.
 
 2) Run SWE-Bench via mini-swe-agent through ThunderAgent:
@@ -94,7 +93,7 @@ mini-extra swebench \
 
 ### What we changed in mini-swe-agent(to reuse in your own agent workflow)
 - **Program ID injection**  
-  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py#L138) (`process_instance()`), [`litellm_model.py`](src/minisweagent/models/litellm_model.py) (`litellm.completion(...)`).  
+  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py), [`vllm_model.py`](src/minisweagent/models/vllm_model.py) .  
 
   How it works: mini-swe-agent sends requests through `litellm.completion(...)`, with `model_kwargs` expanded into the request kwargs.
 
@@ -102,37 +101,35 @@ mini-extra swebench \
 
   - **ThunderAgent**
   ```python
-  # src/minisweagent/run/benchmarks/swebench.py
+  # src/minisweagent/run/extra/swebench.py
   model_config.setdefault("model_kwargs", {}).setdefault("extra_body", {})["program_id"] = unique_id
 
 
-  # src/minisweagent/models/litellm_model.py 
+  # src/minisweagent/models/vllm_model.py
   # send request with model_kwargs, incl. extra_body.program_id
-  return litellm.completion(
-      model=self.config.model_name,
-      messages=messages,
-      tools=[BASH_TOOL],
-      **(self.config.model_kwargs | kwargs),
-  )
+  return self.client.chat.completions.create(
+            model=self.config.model_name,
+            messages=messages,
+            extra_body=extra_body,
+            **filtered_params
+          )
   ```
 
   - **vLLM**
   ```python
-  # src/minisweagent/run/benchmarks/swebench.py
   model_config.setdefault("model_kwargs", {}).pop("extra_body", None)
 
-  # src/minisweagent/models/litellm_model.py
-  return litellm.completion(
-      model=self.config.model_name,
-      messages=messages,
-      tools=[BASH_TOOL],
-      **(self.config.model_kwargs | kwargs),
-  )
+  return self.client.chat.completions.create(
+            model=self.config.model_name,
+            messages=messages,
+            extra_body=extra_body,
+            **filtered_params
+          )
   ```
 
 
 - **Program release hook**  
-  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py#L181) (`finally:`).  
+  Location: [`swebench.py`](src/minisweagent/run/benchmarks/swebench.py).  
 
   How it works: Send `POST /programs/release` to ThunderAgent with the same `program_id` after the instance finishes.  
 

@@ -1,3 +1,4 @@
+# Identical config file to mini.yaml, but without temperature=0.0
 agent:
   system_template: |
     You are a helpful assistant that can interact with a computer.
@@ -9,7 +10,7 @@ agent:
     <format_example>
     Your reasoning and analysis here. Explain why you want to perform the action.
 
-    ```mswea_bash_command
+    ```bash
     your_command_here
     ```
     </format_example>
@@ -50,7 +51,7 @@ agent:
     <example_response>
     THOUGHT: I need to understand the structure of the repository first. Let me check what files are in the current directory to get a better understanding of the codebase.
 
-    ```mswea_bash_command
+    ```bash
     ls -la
     ```
     </example_response>
@@ -59,7 +60,7 @@ agent:
 
     ### Create a new file:
 
-    ```mswea_bash_command
+    ```bash
     cat <<'EOF' > newfile.py
     import numpy as np
     hello = "world"
@@ -75,7 +76,7 @@ agent:
     </important>
     {%- endif -%}
 
-    ```mswea_bash_command
+    ```bash
     # Replace all occurrences
     sed -i 's/old_string/new_string/g' filename.py
 
@@ -91,31 +92,17 @@ agent:
 
     ### View file content:
 
-    ```mswea_bash_command
+    ```bash
     # View specific lines with numbers
     nl -ba filename.py | sed -n '10,20p'
     ```
 
     ### Any other command you want to run
 
-    ```mswea_bash_command
+    ```bash
     anything
     ```
-  step_limit: 0.
-  cost_limit: 3.
-  mode: confirm
-environment:
-  env:
-    PAGER: cat
-    MANPAGER: cat
-    LESS: -R
-    PIP_PROGRESS_BAR: 'off'
-    TQDM_DISABLE: '1'
-model:
-  observation_template: |
-    {% if output.exception_info -%}
-    <exception>{{output.exception_info}}</exception>
-    {% endif -%}
+  action_observation_template: |
     <returncode>{{output.returncode}}</returncode>
     {% if output.output | length < 10000 -%}
     <output>
@@ -140,20 +127,32 @@ model:
     {{ output.output[-5000:] }}
     </output_tail>
     {%- endif -%}
-  model_kwargs:
-    drop_params: true
   format_error_template: |
     Please always provide EXACTLY ONE action in triple backticks, found {{actions|length}} actions.
-
-    Please format your action in triple backticks as shown in <response_example>.
+    If you want to end the task, please issue the following command: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`
+    without any other command.
+    Else, please format your response exactly as follows:
 
     <response_example>
     Here are some thoughts about why you want to perform the action.
 
-    ```mswea_bash_command
+    ```bash
     <action>
     ```
     </response_example>
 
-    If you have completed your assignment, please consult the first message about how to
-    submit your solution (you will not be able to continue working on this task after that).
+    Note: In rare cases, if you need to reference a similar format in your command, you might have
+    to proceed in two steps, first writing TRIPLEBACKTICKSBASH, then replacing them with ```bash.
+  step_limit: 0.
+  cost_limit: 3.
+  mode: confirm
+environment:
+  env:
+    PAGER: cat
+    MANPAGER: cat
+    LESS: -R
+    PIP_PROGRESS_BAR: 'off'
+    TQDM_DISABLE: '1'
+model:
+  model_kwargs:
+    drop_params: true

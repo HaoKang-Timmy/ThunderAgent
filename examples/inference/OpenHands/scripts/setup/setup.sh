@@ -11,4 +11,4 @@ source .venv/bin/activate
 # Install OpenHands (code) in editable mode
 uv pip install vllm --torch-backend=auto
 uv pip install -e examples/inference/OpenHands
-
+uv pip install huggingface_hub

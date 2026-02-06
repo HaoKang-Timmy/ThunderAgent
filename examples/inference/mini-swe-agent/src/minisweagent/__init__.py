@@ -8,7 +8,7 @@ This file provides:
   unless you want the static type checking.
 """
 
-__version__ = "2.0.0a1"
+__version__ = "1.14.4"
 
 import os
 from pathlib import Path
@@ -21,7 +21,6 @@ from rich.console import Console
 from minisweagent.utils.log import logger
 
 package_dir = Path(__file__).resolve().parent
-
 
 global_config_dir = Path(os.getenv("MSWEA_GLOBAL_CONFIG_DIR") or user_config_dir("mini-swe-agent"))
 global_config_dir.mkdir(parents=True, exist_ok=True)
@@ -43,18 +42,12 @@ class Model(Protocol):
     """Protocol for language models."""
 
     config: Any
+    cost: float
+    n_calls: int
 
     def query(self, messages: list[dict[str, str]], **kwargs) -> dict: ...
 
-    def format_message(self, **kwargs) -> dict: ...
-
-    def format_observation_messages(
-        self, message: dict, outputs: list[dict], template_vars: dict | None = None
-    ) -> list[dict]: ...
-
-    def get_template_vars(self, **kwargs) -> dict[str, Any]: ...
-
-    def serialize(self) -> dict: ...
+    def get_template_vars(self) -> dict[str, Any]: ...
 
 
 class Environment(Protocol):
@@ -62,21 +55,20 @@ class Environment(Protocol):
 
     config: Any
 
-    def execute(self, action: dict, cwd: str = "") -> dict[str, Any]: ...
+    def execute(self, command: str, cwd: str = "") -> dict[str, str]: ...
 
-    def get_template_vars(self, **kwargs) -> dict[str, Any]: ...
-
-    def serialize(self) -> dict: ...
+    def get_template_vars(self) -> dict[str, Any]: ...
 
 
 class Agent(Protocol):
     """Protocol for agents."""
 
+    model: Model
+    env: Environment
+    messages: list[dict[str, str]]
     config: Any
 
-    def run(self, task: str, **kwargs) -> dict: ...
-
-    def save(self, path: Path | None, *extra_dicts) -> dict: ...
+    def run(self, task: str, **kwargs) -> tuple[str, str]: ...
 
 
 __all__ = [

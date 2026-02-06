@@ -11,5 +11,6 @@ source .venv/bin/activate
 # Install vLLM (GPU build), mini-swe-agent in editable mode, and datasets
 uv pip install vllm --torch-backend=auto
 uv pip install -e examples/inference/mini-swe-agent
-uv pip install datasets
+uv pip install datasets huggingface_hub
+
 

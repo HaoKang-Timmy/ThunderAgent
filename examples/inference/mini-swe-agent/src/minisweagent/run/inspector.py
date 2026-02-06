@@ -2,97 +2,43 @@
 """
 Simple trajectory inspector for browsing agent conversation trajectories.
 
-More information about the usage: [bold green] https://mini-swe-agent.com/latest/usage/inspector/ [/bold green].
+[not dim]
+More information about the usage: [bold green]https://mini-swe-agent.com/latest/usage/inspector/[/bold green]
+[/not dim]
 """
 
 import json
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 
 import typer
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Container, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Static
 
-from minisweagent.models.utils.content_string import get_content_string
-
-
-def _messages_to_steps(messages: list[dict]) -> list[list[dict]]:
-    """Group messages into "pages" as shown by the UI."""
-    steps = []
-    current_step = []
-    for message in messages:
-        # Start new step with new tool uses
-        if message.get("extra", {}).get("actions") or message.get("role") == "assistant":
-            steps.append(current_step)
-            current_step = [message]
-        else:
-            current_step.append(message)
-    if current_step:
-        steps.append(current_step)
-    return steps
-
+from minisweagent.agents.interactive_textual import _messages_to_steps
 
 app = typer.Typer(rich_markup_mode="rich", add_completion=False)
 
 
-class BindingCommandProvider(Provider):
-    """Provide bindings as commands in the palette."""
-
-    COMMAND_DESCRIPTIONS = {
-        "next_step": "Next step in the current trajectory",
-        "previous_step": "Previous step in the current trajectory",
-        "first_step": "First step in the current trajectory",
-        "last_step": "Last step in the current trajectory",
-        "scroll_down": "Scroll down",
-        "scroll_up": "Scroll up",
-        "next_trajectory": "Next trajectory",
-        "previous_trajectory": "Previous trajectory",
-        "open_in_jless": "Open the current step in jless",
-        "open_in_jless_all": "Open the entire trajectory in jless",
-        "quit": "Quit the inspector",
-    }
-
-    async def discover(self) -> Hits:
-        app = self.app
-        for binding in app.BINDINGS:
-            desc = self.COMMAND_DESCRIPTIONS.get(binding.action, binding.description)
-            yield DiscoveryHit(desc, lambda b=binding: app.run_action(b.action))
-
-    async def search(self, query: str) -> Hits:
-        matcher = self.matcher(query)
-        app = self.app
-        for binding in app.BINDINGS:
-            desc = self.COMMAND_DESCRIPTIONS.get(binding.action, binding.description)
-            score = matcher.match(desc)
-            if score > 0:
-                yield Hit(score, matcher.highlight(desc), lambda b=binding: app.run_action(b.action))
-
-
 class TrajectoryInspector(App):
-    COMMANDS = {BindingCommandProvider}
     BINDINGS = [
         Binding("right,l", "next_step", "Step++"),
         Binding("left,h", "previous_step", "Step--"),
         Binding("0", "first_step", "Step=0"),
         Binding("$", "last_step", "Step=-1"),
-        Binding("j,down", "scroll_down", "↓"),
-        Binding("k,up", "scroll_up", "↑"),
-        Binding("L", "next_trajectory", "Traj++"),
-        Binding("H", "previous_trajectory", "Traj--"),
-        Binding("e", "open_in_jless", "Jless"),
-        Binding("E", "open_in_jless_all", "Jless (all)"),
+        Binding("j,down", "scroll_down", "Scroll down"),
+        Binding("k,up", "scroll_up", "Scroll up"),
+        Binding("L", "next_trajectory", "Next trajectory"),
+        Binding("H", "previous_trajectory", "Previous trajectory"),
         Binding("q", "quit", "Quit"),
     ]
 
     def __init__(self, trajectory_files: list[Path]):
         css_path = os.environ.get(
-            "MSWEA_INSPECTOR_STYLE_PATH", str(Path(__file__).parent.parent.parent / "config" / "inspector.tcss")
+            "MSWEA_INSPECTOR_STYLE_PATH", str(Path(__file__).parent.parent / "config" / "mini.tcss")
         )
         self.__class__.CSS = Path(css_path).read_text()
 
@@ -198,10 +144,13 @@ class TrajectoryInspector(App):
             return
 
         for message in self.steps[self.i_step]:
-            content_str = get_content_string(message)
+            if isinstance(message["content"], list):
+                content_str = "\n".join([item["text"] for item in message["content"]])
+            else:
+                content_str = str(message["content"])
             message_container = Vertical(classes="message-container")
             container.mount(message_container)
-            role = message.get("role") or message.get("type") or "unknown"
+            role = message["role"].replace("assistant", "mini-swe-agent")
             message_container.mount(Static(role.upper(), classes="message-header"))
             message_container.mount(Static(Text(content_str, no_wrap=False), classes="message-content"))
 
@@ -238,32 +187,6 @@ class TrajectoryInspector(App):
     def action_scroll_up(self) -> None:
         vs = self.query_one(VerticalScroll)
         vs.scroll_to(y=vs.scroll_target_y - 15)
-
-    def _open_in_jless(self, path: Path) -> None:
-        """Open file in jless."""
-        with self.suspend():
-            try:
-                subprocess.run(["jless", path])
-            except FileNotFoundError:
-                self.notify("jless not found. Install with: `brew install jless`", severity="error")
-
-    def action_open_in_jless(self) -> None:
-        """Open the current step's messages in jless."""
-        if not self.steps:
-            self.notify("No messages to display", severity="warning")
-            return
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(self.steps[self.i_step], f, indent=2)
-            temp_path = Path(f.name)
-        self._open_in_jless(temp_path)
-        temp_path.unlink()
-
-    def action_open_in_jless_all(self) -> None:
-        """Open the entire trajectory in jless."""
-        if not self.trajectory_files:
-            self.notify("No trajectory to display", severity="warning")
-            return
-        self._open_in_jless(self.trajectory_files[self.i_trajectory])
 
 
 @app.command(help=__doc__)
