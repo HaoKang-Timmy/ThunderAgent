@@ -62,6 +62,7 @@ class MultiBackendRouter:
         scheduler_interval: float = 5.0,
         backend_type: str = "vllm",
         acting_token_weight: float = 1.0,
+        use_acting_token_decay: bool = False,
     ) -> None:
         # Support single URL string or list of URLs
         if isinstance(backend_urls, str):
@@ -78,6 +79,7 @@ class MultiBackendRouter:
                 url=url,
                 tool_coefficient=acting_token_weight,
                 metrics_client=metrics_client,
+                use_acting_token_decay=use_acting_token_decay,
             )
         
         # All programs (single source of truth)
@@ -311,6 +313,7 @@ class MultiBackendRouter:
                 backend.register_program(program_id, state)
             # Status change is enough - token stats are computed from program status
             state.status = ProgramStatus.REASONING
+            state.acting_since = None
             return True
         
         # ---------------------------------------------------------------------
@@ -323,6 +326,7 @@ class MultiBackendRouter:
         # priority: REASONING programs (pending request) > ACTING programs (idle).
         if state.waiting_event is not None:
             state.status = ProgramStatus.REASONING
+            state.acting_since = None
             await self._wait_for_resume(program_id, state)
             # After _wait_for_resume returns, _resume_program has been called which:
             # - Registered program with target backend
@@ -340,10 +344,12 @@ class MultiBackendRouter:
                 backend.register_program(program_id, state)
                 logger.debug(f"Assigned new program {program_id} to {backend_url}")
                 state.status = ProgramStatus.REASONING
+                state.acting_since = None
                 return True
             else:
-                # Queue and wait — set REASONING before waiting for same priority reason
+                # Queue and wait — set REASONING before waiting for priority
                 state.status = ProgramStatus.REASONING
+                state.acting_since = None
                 state.waiting_event = asyncio.Event()
                 state.state = ProgramState.PAUSED
                 self._add_to_global_waiting_queue_sync(program_id, state, backend=None)
@@ -359,6 +365,7 @@ class MultiBackendRouter:
             return False
         
         state.status = ProgramStatus.REASONING
+        state.acting_since = None
         return True
 
     def update_program_after_request(
@@ -378,6 +385,7 @@ class MultiBackendRouter:
         """
         # Transition to ACTING
         state.status = ProgramStatus.ACTING
+        state.acting_since = time.time()
         
         # Update global char_to_token_ratio based on actual prefill
         # ratio = context_len / prompt_tokens (chars per token)
@@ -658,20 +666,18 @@ class MultiBackendRouter:
                 logger.error(f"Scheduler error: {e}", exc_info=True)
 
     async def _scheduled_check(self):
-        """Periodic check: enforce capacity, update shared_tokens, resume waiting programs."""
-        # Step 1: Check thrashing and pause if needed (uses cached shared_tokens)
-        for url, backend in self.backends.items():
-            # Check thrashing based on tracked program_tokens and cached shared_tokens
-            if backend.cache_config and backend.remaining_capacity() < 0:
-                await self._pause_until_safe(backend)
-        
-        # Step 2: Resume waiting programs (using cached shared_tokens from last cycle)
-        await self._greedy_resume()
-        
-        # Step 3: Fetch fresh metrics and update shared_tokens for next cycle
+        """Periodic check: resume waiting programs, enforce capacity, update metrics."""
+        # Step 1: Fetch fresh metrics
         for backend in self.backends.values():
             await backend.fetch_metrics()
-            # backend.update_shared_tokens()  # Keep shared_tokens = 0 for conservative capacity
+        
+        # Step 2: Resume waiting programs (uses decay-adjusted capacity if enabled)
+        await self._greedy_resume()
+        
+        # Step 3: Check thrashing and pause if needed (uses original capacity, no decay)
+        for url, backend in self.backends.items():
+            if backend.cache_config and backend.remaining_capacity() < 0:
+                await self._pause_until_safe(backend)
 
     async def _pause_until_safe(self, backend: BackendState):
         """Pause programs until backend is within capacity.
@@ -729,12 +735,15 @@ class MultiBackendRouter:
         from ..backend.state import BUFFER_PER_PROGRAM
         
         # --- Collect backend capacities ---
+        # Use decay-adjusted capacity when enabled (optimistic for resume)
         backend_caps: list[tuple[BackendState, int]] = []
         total_capacity = 0
         for url, backend in self.backends.items():
             if not backend.cache_config or not backend.healthy:
                 continue
-            remaining = backend.remaining_capacity()
+            remaining = (backend.remaining_capacity_with_decay()
+                         if backend.use_acting_token_decay
+                         else backend.remaining_capacity())
             if remaining > BUFFER_PER_PROGRAM:
                 backend_caps.append((backend, remaining))
                 total_capacity += remaining
