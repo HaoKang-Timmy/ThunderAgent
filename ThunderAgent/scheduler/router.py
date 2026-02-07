@@ -31,7 +31,6 @@ class PausedInfo:
     paused_at: float
     origin_backend: Optional[str]  # None for new programs that haven't been assigned yet
     step_count: int
-    paused_from_status: Optional[str] = None  # Status before pause: "reasoning", "acting", or None for new programs
 
 
 class MultiBackendRouter:
@@ -320,13 +319,16 @@ class MultiBackendRouter:
         # Step 1: Handle PAUSED programs (wait for resume)
         # Note: waiting_event is created in _pause_program and cleared in _resume_program.
         # If waiting_event is not None, the program is still PAUSED and we must wait.
+        # Set status to REASONING before waiting so the scheduler sees the correct
+        # priority: REASONING programs (pending request) > ACTING programs (idle).
         if state.waiting_event is not None:
+            state.status = ProgramStatus.REASONING
             await self._wait_for_resume(program_id, state)
             # After _wait_for_resume returns, _resume_program has been called which:
-            # - Added tokens to backend (as ACTING or REASONING based on status at pause time)
+            # - Registered program with target backend
             # - Set state.state = ACTIVE
             # - Cleared waiting_event = None
-            # Fall through to Step 3 to handle token shift if needed
+            # Fall through to Step 3
         
         # Step 2: Handle new programs (assign backend or queue)
         if is_new_program and state.backend_url is None:
@@ -340,14 +342,14 @@ class MultiBackendRouter:
                 state.status = ProgramStatus.REASONING
                 return True
             else:
-                # Queue and wait
+                # Queue and wait — set REASONING before waiting for same priority reason
+                state.status = ProgramStatus.REASONING
                 state.waiting_event = asyncio.Event()
                 state.state = ProgramState.PAUSED
                 self._add_to_global_waiting_queue_sync(program_id, state, backend=None)
                 logger.debug(f"Queued new program {program_id} (tokens={state.total_tokens})")
                 await self._wait_for_resume(program_id, state)
-                # After resume: tokens already added by _resume_program
-                state.status = ProgramStatus.REASONING
+                # After resume: program registered with backend by _resume_program
                 return True
         
         # Step 3: Normal case - existing ACTIVE program with backend
@@ -356,7 +358,6 @@ class MultiBackendRouter:
             logger.error(f"Program {program_id} has no valid backend")
             return False
         
-        # Status change is enough - token stats are computed from program status
         state.status = ProgramStatus.REASONING
         return True
 
@@ -461,7 +462,6 @@ class MultiBackendRouter:
 
     def _add_to_global_waiting_queue_sync(
         self, program_id: str, state: Program, backend: Optional[BackendState] = None,
-        paused_from_status: Optional[str] = None
     ) -> None:
         """Add a program to the global waiting queue (synchronous version)."""
         paused_info = PausedInfo(
@@ -470,7 +470,6 @@ class MultiBackendRouter:
             paused_at=time.time(),
             origin_backend=backend.url if backend else None,
             step_count=state.step_count,
-            paused_from_status=paused_from_status,
         )
         self.global_waiting_queue[program_id] = paused_info
 
@@ -542,14 +541,11 @@ class MultiBackendRouter:
         if not backend:
             return
         
-        # Record the status before pause (for resume)
-        paused_from_status = state.status.value if state.status else None
-        
         # Unregister from backend
         backend.unregister_program(program_id)
         
-        # Add to global paused pool with original status recorded
-        self._add_to_global_waiting_queue_sync(program_id, state, backend, paused_from_status)
+        # Add to global paused pool
+        self._add_to_global_waiting_queue_sync(program_id, state, backend)
         
         # Save origin backend and clear current backend
         state.origin_backend = state.backend_url
@@ -598,18 +594,14 @@ class MultiBackendRouter:
 
     def _resume_program(
         self,
-        program_id: str,
         state: Program,
         target_backend: Optional[BackendState] = None,
-        paused_info: Optional[PausedInfo] = None,
     ) -> None:
         """Resume a paused program after it has been claimed from the pool.
         
         Args:
-            program_id: The program ID
-            state: The program state
+            state: The program state (contains program_id, origin_backend, etc.)
             target_backend: Backend to resume to (may differ from origin for migration)
-            paused_info: Pause metadata containing paused_from_status
         
         Uses state.origin_backend as fallback if target_backend is not provided.
         """
@@ -623,7 +615,7 @@ class MultiBackendRouter:
             return
 
         # Register with target backend
-        backend.register_program(program_id, state)
+        backend.register_program(state.program_id, state)
         state.backend_url = backend.url
         state.origin_backend = None  # Clear origin_backend after resume
         state.state = ProgramState.ACTIVE
@@ -633,11 +625,11 @@ class MultiBackendRouter:
             state.waiting_event.set()
             state.waiting_event = None
         
-        logger.info(f"Resumed program {program_id} to {backend.url} (status={state.status.value}, tokens={state.total_tokens}, active={backend.active_program_tokens})")
+        logger.info(f"Resumed program {state.program_id} to {backend.url} (status={state.status.value}, tokens={state.total_tokens}, active={backend.active_program_tokens})")
 
     async def _claim_specific_paused(
         self, program_id: str
-    ) -> Optional[Tuple[str, Program, PausedInfo]]:
+    ) -> Optional[Program]:
         """Claim a specific paused program in a lock-protected way."""
         async with self.pause_resume_lock:
             info = self.global_waiting_queue.get(program_id)
@@ -648,7 +640,7 @@ class MultiBackendRouter:
                 self.global_waiting_queue.pop(program_id, None)
                 return None
             self.global_waiting_queue.pop(program_id, None)
-            return program_id, state, info
+            return state
 
     # -------------------------------------------------------------------------
     # Periodic Scheduler
@@ -716,73 +708,128 @@ class MultiBackendRouter:
             logger.info(f"Scheduler paused/marked {paused_count} programs on {backend.url}")
 
     async def _greedy_resume(self):
-        """Resume waiting programs using greedy algorithm.
+        """Resume waiting programs using Best Fit Decreasing (BFD) bin-packing.
         
-        Priority (all sorted by token count ascending):
+        Algorithm:
+        1. Compute total backend capacity across all healthy backends.
+        2. Select programs in priority order whose cumulative required tokens
+           ≤ total capacity — the maximum set we can possibly resume.
+        3. BFD placement: sort selected programs descending by required tokens,
+           place the largest on the backend with the highest remaining capacity,
+           re-sort backends after each placement.
+        4. Terminate when all selected programs are placed or the smallest
+           remaining program exceeds every backend's remaining capacity.
+        
+        Priority order for selection:
         1. REASONING programs (step > 1) - highest priority
-        2. NEW programs (step = 1, REASONING) - medium priority
+        2. NEW programs (step = 1) - medium priority
         3. ACTING programs - lowest priority
-        
-        Backends sorted by remaining capacity (largest first).
+        Within each group, sorted by token count ascending.
         """
         from ..backend.state import BUFFER_PER_PROGRAM
         
-        # Get backends with remaining capacity, sorted by capacity (largest first)
-        backends_with_capacity = []
+        # --- Collect backend capacities ---
+        backend_caps: list[tuple[BackendState, int]] = []
+        total_capacity = 0
         for url, backend in self.backends.items():
             if not backend.cache_config or not backend.healthy:
                 continue
             remaining = backend.remaining_capacity()
-            if remaining > BUFFER_PER_PROGRAM:  # Need room for at least buffer
-                backends_with_capacity.append((backend, remaining))
+            if remaining > BUFFER_PER_PROGRAM:
+                backend_caps.append((backend, remaining))
+                total_capacity += remaining
         
-        if not backends_with_capacity:
+        if not backend_caps or total_capacity <= 0:
             return
         
-        backends_with_capacity.sort(key=lambda x: -x[1])  # Largest capacity first
-        
         async with self.pause_resume_lock:
-            waiting = self._get_paused_programs_sorted(ascending=True)
+            paused_programs = self._get_paused_programs_sorted(ascending=True)
             
-            if not waiting:
+            if not paused_programs:
                 return
             
-            # Separate programs into three priority groups
-            experienced_reasoning = []  # REASONING with step > 1
-            new_programs = []           # step = 1 (new programs)
-            acting_waiting = []         # ACTING programs
+            # --- Priority grouping (each group ascending by tokens) ---
+            # Programs with a pending request have status=REASONING (set before waiting).
+            # Programs paused without a pending request have status=ACTING.
+            reasoning_group: list[Program] = []   # REASONING with step > 1 (highest priority)
+            new_program_group: list[Program] = []  # step = 1 (new programs)
+            acting_group: list[Program] = []       # ACTING (lowest priority)
             
-            for pid, state, info in waiting:
+            for state in paused_programs:
                 if state.step_count == 1:
-                    # New programs (step = 1) - medium priority
-                    new_programs.append((pid, state, info))
-                elif info.paused_from_status == "reasoning":
-                    # Experienced REASONING - highest priority
-                    experienced_reasoning.append((pid, state, info))
+                    new_program_group.append(state)
+                elif state.status == ProgramStatus.REASONING:
+                    reasoning_group.append(state)
                 else:
-                    # ACTING programs - lowest priority
-                    acting_waiting.append((pid, state, info))
+                    acting_group.append(state)
             
-            # Process in priority order: experienced_reasoning → new → acting
-            ordered_waiting = experienced_reasoning + new_programs + acting_waiting
+            candidates_by_priority = reasoning_group + new_program_group + acting_group
+            
+            # --- Step 1: Select max programs fitting within total capacity ---
+            # Walk through priority order; include a program if cumulative fits.
+            resumable_programs: list[Program] = []
+            cumulative_tokens = 0
+            for state in candidates_by_priority:
+                required_tokens = state.total_tokens + BUFFER_PER_PROGRAM
+                if cumulative_tokens + required_tokens <= total_capacity:
+                    resumable_programs.append(state)
+                    cumulative_tokens += required_tokens
+            
+            if not resumable_programs:
+                return
+            
+            # --- Step 2: BFD placement (largest first → highest capacity backend) ---
+            resumable_programs.sort(key=lambda s: -s.total_tokens)  # descending by tokens
+            backend_caps.sort(key=lambda x: -x[1])                  # descending by capacity
             
             resumed_count = 0
-            for program_id, state, info in ordered_waiting:
-                # Find a backend that can fit this program
-                for i, (backend, remaining) in enumerate(backends_with_capacity):
-                    required = state.total_tokens + BUFFER_PER_PROGRAM
-                    if remaining >= required:
-                        # Resume to this backend
-                        self.global_waiting_queue.pop(program_id, None)
-                        self._resume_program(program_id, state, target_backend=backend, paused_info=info)
-                        resumed_count += 1
-                        
-                        # Update remaining capacity for next iteration
-                        backends_with_capacity[i] = (backend, remaining - (state.total_tokens + BUFFER_PER_PROGRAM))
-                        break
+            reasoning_resumed = new_resumed = acting_resumed = 0
+            min_required_tokens = resumable_programs[-1].total_tokens + BUFFER_PER_PROGRAM
+            
+            for state in resumable_programs:
+                if not backend_caps:
+                    break
+                
+                required_tokens = state.total_tokens + BUFFER_PER_PROGRAM
+                max_backend_capacity = backend_caps[0][1]
+                
+                # Early termination: if even the smallest program
+                # can't fit the largest backend, nothing more can be placed.
+                if min_required_tokens > max_backend_capacity:
+                    break
+                
+                # Current program too large for the largest backend — skip it,
+                # smaller programs following may still fit.
+                if required_tokens > max_backend_capacity:
+                    continue
+                
+                # Place on the backend with the most remaining capacity
+                target_backend, target_remaining = backend_caps[0]
+                self.global_waiting_queue.pop(state.program_id, None)
+                self._resume_program(state, target_backend=target_backend)
+                resumed_count += 1
+                
+                # Track which priority group
+                if state.step_count == 1:
+                    new_resumed += 1
+                elif state.status == ProgramStatus.REASONING:
+                    reasoning_resumed += 1
+                else:
+                    acting_resumed += 1
+                
+                # Update capacity and re-sort backends
+                updated_remaining = target_remaining - required_tokens
+                if updated_remaining > BUFFER_PER_PROGRAM:
+                    backend_caps[0] = (target_backend, updated_remaining)
+                    backend_caps.sort(key=lambda x: -x[1])  # re-sort after update
+                else:
+                    backend_caps.pop(0)  # backend full, remove from candidates
             
             if resumed_count > 0:
-                logger.info(f"Scheduler resumed {resumed_count} programs (experienced_reasoning={len(experienced_reasoning)}, new={len(new_programs)}, acting={len(acting_waiting)})")
+                logger.info(
+                    f"Scheduler resumed {resumed_count} programs "
+                    f"(reasoning={reasoning_resumed}, new={new_resumed}, acting={acting_resumed})"
+                )
 
     async def _wait_for_resume(self, program_id: str, state: Program, timeout: float = 1800.0) -> None:
         """Wait for a paused program to be resumed.
@@ -796,18 +843,17 @@ class MultiBackendRouter:
             await asyncio.wait_for(state.waiting_event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             logger.warning(f"Program {program_id} wait timeout after {timeout}s, forcing resume")
-            claim = await self._claim_specific_paused(program_id)
-            if claim is None:
+            claimed_state = await self._claim_specific_paused(program_id)
+            if claimed_state is None:
                 return
-            program_id, state, info = claim
             
             # For new programs without origin backend, force assign to least loaded backend
             target_backend = None
-            if state.origin_backend is None:
+            if claimed_state.origin_backend is None:
                 target_backend = self.select_backend_for_new_program_default()
                 logger.info(f"Force assigning new program {program_id} to {target_backend.url}")
             
-            self._resume_program(program_id, state, target_backend=target_backend, paused_info=info)
+            self._resume_program(claimed_state, target_backend=target_backend)
 
     def get_program_stats(self) -> Dict[str, Any]:
         """Get statistics about all programs."""
