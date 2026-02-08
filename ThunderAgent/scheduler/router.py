@@ -11,6 +11,7 @@ import httpx
 from fastapi.responses import Response
 
 from ..backend import BackendState, MetricsClient, SGLangMetricsClient, VLLMMetricsClient
+from ..backend.skyrl_metrics import SkyRLMetricsClient
 from ..program import Program, ProgramStatus, ProgramState
 from ..profile.state import ProfileState
 from ..config import get_config
@@ -51,6 +52,8 @@ class MultiBackendRouter:
             return VLLMMetricsClient(url)
         if backend_type == "sglang":
             return SGLangMetricsClient(url)
+        if backend_type == "skyrl":
+            return SkyRLMetricsClient(url)
         raise ValueError(f"Unsupported backend_type: {backend_type}")
 
     def __init__(
