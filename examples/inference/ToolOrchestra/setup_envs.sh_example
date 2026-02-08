@@ -61,11 +61,11 @@ echo "============================================================"
 
 # Check if required paths exist
 if [ -n "$REPO_PATH" ] && [ ! -d "$REPO_PATH" ]; then
-    echo "⚠️  WARNING: REPO_PATH does not exist: $REPO_PATH"
+    echo "WARNING: REPO_PATH does not exist: $REPO_PATH"
 fi
 
 if [ -n "$CKPT_DIR" ] && [ ! -d "$CKPT_DIR" ]; then
-    echo "⚠️  WARNING: CKPT_DIR does not exist: $CKPT_DIR"
+    echo "WARNING: CKPT_DIR does not exist: $CKPT_DIR"
     echo "   Please download the model or update CKPT_DIR"
 fi
 
@@ -82,11 +82,11 @@ if [ -n "$CONDA_DEFAULT_ENV" ]; then
         VLLM_VERSION=$(python -c "import vllm; print(vllm.__version__)" 2>/dev/null)
         echo "✓ vLLM installed: $VLLM_VERSION"
     else
-        echo "⚠️  WARNING: vLLM not installed in current environment"
+        echo "WARNING: vLLM not installed in current environment"
         echo "   Install: pip install vllm==0.9.2 or vllm==0.10.1"
     fi
 else
-    echo "⚠️  WARNING: No conda environment activated"
+    echo "WARNING: No conda environment activated"
     echo "   For eval, activate vllm1: conda activate vllm1"
 fi
 
@@ -99,8 +99,8 @@ if command -v nvidia-smi &> /dev/null; then
         nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader 2>/dev/null | \
             awk -F', ' '{printf "  GPU %s: %s (%s)\n", $1, $2, $3}'
     else
-        echo "⚠️  WARNING: No GPUs detected"
+        echo "WARNING: No GPUs detected"
     fi
 else
-    echo "⚠️  WARNING: nvidia-smi not found"
+    echo "WARNING: nvidia-smi not found"
 fi
