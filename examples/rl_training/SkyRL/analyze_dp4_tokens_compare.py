@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Compare per-step rollout tokens/sec for DP=4 default vs TR(atw=0.1).
 
-Definition (same as analyze_all.py):
-  tokens_per_sec = (TRAJS_PER_STEP * avg_response_length) / generate_duration_seconds
-
-Inputs are SLURM job IDs. The script reads slurm-<JOBID>.err and prints a
-focused markdown table to stdout.
+Inputs are SLURM job IDs. The script reads slurm-<JOBID>.err and prints an
+aligned 3-column terminal table:
+  Step | <default-label> tokens/sec | <tr-label> tokens/sec
 """
 
 from __future__ import annotations
@@ -84,6 +82,31 @@ def fmt(value: Optional[float], digits: int = 1) -> str:
     return f"{value:.{digits}f}"
 
 
+def print_aligned_table(headers: List[str], rows: List[List[str]]) -> None:
+    if not headers:
+        return
+    n_cols = len(headers)
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i in range(min(n_cols, len(row))):
+            widths[i] = max(widths[i], len(str(row[i])))
+
+    # Step column left-aligned, numeric columns right-aligned.
+    aligns = ["left"] + ["right"] * (n_cols - 1)
+
+    def _pad(text: str, width: int, align: str) -> str:
+        return text.ljust(width) if align == "left" else text.rjust(width)
+
+    print(" | ".join(_pad(headers[i], widths[i], "left") for i in range(n_cols)))
+    print("-+-".join("-" * widths[i] for i in range(n_cols)))
+    for row in rows:
+        print(
+            " | ".join(
+                _pad(str(row[i]) if i < len(row) else "", widths[i], aligns[i]) for i in range(n_cols)
+            )
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--default-job", required=True, help="SLURM job ID for DP=4 default run")
@@ -119,77 +142,22 @@ def main() -> None:
 
     all_step_ids = sorted(set(default_tps.keys()) | set(tr_tps.keys()))
 
-    print(
-        f"# DP=4 Rollout Tokens/sec Comparison ({args.default_label} vs {args.tr_label})"
-    )
-    print()
-    print(f"- default job: `{args.default_job}`")
-    print(f"- tr job: `{args.tr_job}`")
-    print(
-        f"- formula: `tokens/sec = ({args.trajs_per_step} * avg_response_length) / generate_duration_s`"
-    )
-    print()
-
     headers = [
         "Step",
         f"{args.default_label} tokens/sec",
         f"{args.tr_label} tokens/sec",
-        "Delta (tr-default)",
-        "Delta %",
     ]
-    print("| " + " | ".join(headers) + " |")
-    print("|---:|---:|---:|---:|---:|")
-
-    paired_default: List[float] = []
-    paired_tr: List[float] = []
-
+    rows: List[List[str]] = []
     for step_id in all_step_ids:
-        d = default_tps.get(step_id)
-        t = tr_tps.get(step_id)
-
-        delta = None
-        delta_pct = None
-        if d is not None and t is not None:
-            delta = t - d
-            if d != 0:
-                delta_pct = (delta / d) * 100.0
-            paired_default.append(d)
-            paired_tr.append(t)
-
-        print(
-            "| "
-            + " | ".join(
-                [
-                    str(step_id),
-                    fmt(d),
-                    fmt(t),
-                    fmt(delta),
-                    fmt(delta_pct),
-                ]
-            )
-            + " |"
+        rows.append(
+            [
+                str(step_id),
+                fmt(default_tps.get(step_id)),
+                fmt(tr_tps.get(step_id)),
+            ]
         )
 
-    if paired_default and paired_tr:
-        avg_d = sum(paired_default) / len(paired_default)
-        avg_t = sum(paired_tr) / len(paired_tr)
-        avg_delta = avg_t - avg_d
-        avg_delta_pct = (avg_delta / avg_d) * 100.0 if avg_d != 0 else None
-        print(
-            "| "
-            + " | ".join(
-                [
-                    "**Average (paired steps)**",
-                    f"**{fmt(avg_d)}**",
-                    f"**{fmt(avg_t)}**",
-                    f"**{fmt(avg_delta)}**",
-                    f"**{fmt(avg_delta_pct)}**",
-                ]
-            )
-            + " |"
-        )
-    else:
-        print("\nNo paired completed rollout steps found yet.")
+    print_aligned_table(headers, rows)
 
 
 if __name__ == "__main__":

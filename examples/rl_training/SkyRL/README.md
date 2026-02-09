@@ -170,17 +170,10 @@ Expected output:
 
 - default job: `25609`
 - tr job: `25610`
-- formula: `tokens/sec = (396 * avg_response_length) / generate_duration_s`
 
-Step                   | dp4_default tokens/sec | dp4_tr_atw01 tokens/sec | Delta (tr-default) | Delta %
------------------------+------------------------+-------------------------+--------------------+--------
-1                      |                 1222.7 |                  1385.9 |              163.2 |    13.3
-2                      |                 1362.8 |                  1713.0 |              350.2 |    25.7
-3                      |                 1776.8 |                  1809.6 |               32.8 |     1.8
-4                      |                 1645.3 |                  1943.9 |              298.6 |    18.1
-5                      |                 1747.6 |                  1917.3 |              169.7 |     9.7
-6                      |                 1207.6 |                  1842.4 |              634.8 |    52.6
-Average (paired steps) |                 1493.8 |                  1768.7 |              274.9 |    18.4
+Step                   | dp4_default tokens/sec | dp4_tr_atw01 tokens/sec |
+-----------------------+------------------------+-------------------------+
+1                      |                 1222.7 |                  1809.6 |
 ```
 
 ## Reproduction Scripts in This Directory
