@@ -36,25 +36,9 @@ ThunderAgent is flexible and easy to use with:
 
 ThunderAgent sits between agent clients and the infrastructure layer as an agentic workflow scheduler. On one hand, it improves inference throughput of vLLM/SGLang across multiple GPU nodes through program-aware scheduling. On the other hand, it provides a unified tool management interface for resources like Docker containers and remote APIs.
 
-```
-                    ┌─────────────────────┐
-                    │    Agent Clients    │
-                    └──────────┬──────────┘
-                               │ OpenAI API
-                               ▼
-                    ┌─────────────────────┐
-                    │    ThunderAgent     │
-                    └───┬─────────────┬───┘
-                        │             │
-          ┌─────────────▼───┐   ┌─────▼─────────────────────────┐
-          │  vLLM / SGLang  │   │  Tool Resources               │
-          │  (Inference)    │   │  (Docker, Search API)         │
-          └────────┬────────┘   └───────────────────────────────┘
-          ┌────────▼────────┐
-          │   GPU Nodes     │
-          │  (Kubernetes)   │
-          └─────────────────┘
-```
+<p align="center">
+  <img alt="ThunderAgent Architecture" src="assets/logos/arch.png" width=55%>
+</p>
 
 ### Inference & Evaluation Results
 
