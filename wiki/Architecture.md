@@ -54,13 +54,13 @@ ThunderAgent/
 │   └── state.py             # BackendState: capacity tracking, program registry
 ├── program/
 │   ├── __init__.py
-│   └── state.py             # Program, ProgramStatus, ProgramState
+│   └── state.py                   # Program, ProgramStatus, ProgramState
 ├── profile/
 │   ├── __init__.py
-│   └── state.py             # ProfileState, StepMetrics, CSV export
+│   └── state.py                   # ProfileState, StepMetrics, CSV export
 └── scheduler/
     ├── __init__.py
-    ├── router.py             # MultiBackendRouter: scheduling, pause/resume, BFD
+    ├── router.py                  # MultiBackendRouter: scheduling, pause/resume, BFD
     └── vllm_request_processor.py  # HTTP forwarding, SSE parsing, usage extraction
 ```
 
