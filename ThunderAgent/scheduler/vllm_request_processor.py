@@ -51,10 +51,12 @@ def extract_usage_info(payload: Any) -> Tuple[Optional[int], Optional[int], Opti
     return total_tokens, prompt_tokens, cached_tokens
 
 
+_HOP_BY_HOP = frozenset({"content-length", "transfer-encoding", "connection"})
+
+
 def filtered_headers(headers: httpx.Headers) -> Dict[str, str]:
     """Filter out hop-by-hop headers that shouldn't be forwarded."""
-    hop_by_hop = {"content-length", "transfer-encoding", "connection"}
-    return {k: v for k, v in headers.items() if k.lower() not in hop_by_hop}
+    return {k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP}
 
 
 def remove_program_id(payload: Dict[str, Any]) -> Dict[str, Any]:

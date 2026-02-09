@@ -7,8 +7,9 @@ Handles HTTP communication with SGLang endpoints, including:
 """
 import asyncio
 import logging
+from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Deque, List, Optional
 import re
 import time
 
@@ -106,7 +107,7 @@ class SGLangMetricsClient(MetricsClient):
     def __init__(self, url: str):
         super().__init__(url)
         self.healthy = True
-        self.metrics_history: List[SGLangMetrics] = []
+        self.metrics_history: Deque[SGLangMetrics] = deque(maxlen=METRICS_HISTORY_SIZE)
         self.cache_config: Optional[SGLangCacheConfig] = None
 
         # HTTP client and monitoring state
@@ -228,8 +229,6 @@ class SGLangMetricsClient(MetricsClient):
             if resp.status_code == 200:
                 metrics = SGLangMetrics.from_prometheus_text(resp.text)
                 self.metrics_history.append(metrics)
-                if len(self.metrics_history) > METRICS_HISTORY_SIZE:
-                    self.metrics_history = self.metrics_history[-METRICS_HISTORY_SIZE:]
                 self.healthy = True
                 return True
             self.healthy = False

@@ -1,8 +1,9 @@
 """vLLM metrics parsing, storage, and client."""
 import asyncio
 import logging
+from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Deque, List, Optional, Tuple
 import re
 import time
 
@@ -166,7 +167,7 @@ class VLLMMetricsClient(MetricsClient):
     def __init__(self, url: str):
         super().__init__(url)
         self.healthy = True
-        self.metrics_history: List[VLLMMetrics] = []
+        self.metrics_history: Deque[VLLMMetrics] = deque(maxlen=METRICS_HISTORY_SIZE)
         self.cache_config: Optional[VLLMCacheConfig] = None
         
         # HTTP client and monitoring state
@@ -274,9 +275,6 @@ class VLLMMetricsClient(MetricsClient):
             if resp.status_code == 200:
                 metrics = VLLMMetrics.from_prometheus_text(resp.text)
                 self.metrics_history.append(metrics)
-                # Keep only the most recent samples
-                if len(self.metrics_history) > METRICS_HISTORY_SIZE:
-                    self.metrics_history = self.metrics_history[-METRICS_HISTORY_SIZE:]
                 self.healthy = True
                 return True
             else:

@@ -22,8 +22,9 @@ SkyRL /metrics response format:
 import asyncio
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Deque, List, Optional
 
 import httpx
 
@@ -65,7 +66,7 @@ class SkyRLMetricsClient(MetricsClient):
     def __init__(self, url: str):
         super().__init__(url)
         self.healthy = True
-        self.metrics_history: List[SkyRLMetrics] = []
+        self.metrics_history: Deque[SkyRLMetrics] = deque(maxlen=METRICS_HISTORY_SIZE)
         self.cache_config: Optional[SkyRLCacheConfig] = None
 
         self._client: Optional[httpx.AsyncClient] = None
@@ -215,8 +216,6 @@ class SkyRLMetricsClient(MetricsClient):
                 timestamp=time.time(),
             )
             self.metrics_history.append(metrics)
-            if len(self.metrics_history) > METRICS_HISTORY_SIZE:
-                self.metrics_history = self.metrics_history[-METRICS_HISTORY_SIZE:]
             self.healthy = True
             return True
         except Exception as e:
