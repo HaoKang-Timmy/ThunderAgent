@@ -647,13 +647,13 @@
               <img src="public/Routing.png" alt="Cross-Node Memory Imbalance Illustration" class="max-w-full rounded" loading="lazy" />
             </div>
             <p class="font-body text-xl text-gray-300 leading-relaxed">
-              In multi-node deployments, a standalone gateway does not have full workflow-level system state, and during KV cache thrashing it cannot reliably determine whether a workflow's KV cache has already been evicted. As a result, it cannot make a good <span class="text-red-400 font-semibold">tradeoff</span> between KV-hit efficiency and workload balance. This often causes either <span class="text-red-400 font-semibold">memory hotspots</span> or <span class="text-red-400 font-semibold">low KV hit rate</span>, and only reaches suboptimal throughput.
+              Unlike request-level serving, multi-node agentic serving cannot simply focus on <span class="text-red-400 font-semibold">load balancing</span>. Since requests within the same workflow share substantial KV cache prefixes, routing them to the same GPU node yields high KV cache hit rates(e.g., vLLM KV Router). However, as shown in the figure above, KV-aware routing can <span class="text-red-400 font-semibold">exacerbate memory imbalance</span> across nodes when memory pressure is uneven. Although SGLang Gateway introduces an algorithm that switches to a load-balancing router under high memory imbalance, it lacks the adaptability required for multi-node and complex agentic workloads, often demanding <span class="text-red-400 font-semibold">manual coefficient tuning</span>. In short, existing routers fail to dynamically balance the tradeoff between <span class="text-red-400 font-semibold">KV cache locality</span> and <span class="text-red-400 font-semibold">load balancing</span>, leading to suboptimal throughput in multi-GPU-node serving.
             </p>
             <div class="mt-6 text-center">
-              <img src="public/mem_diff.png" alt="Memory imbalance observed when using the SGLang gateway" class="rounded" style="width:60%; height:auto; display:inline-block;" loading="lazy" />
+              <img src="public/mem_diff.png" alt="Memory imbalance observed when using the vLLM KV Router" class="rounded" style="width:60%; height:auto; display:inline-block;" loading="lazy" />
             </div>
             <p class="font-body text-xl text-gray-300 leading-relaxed mt-6">
-              We evaluated GLM-4.6 + mini-SWE-Agent on 2 H100 nodes with the SGLang gateway: <span class="text-red-400 font-semibold">memory imbalance</span> emerges across nodes, reaching up to <span class="text-red-400 font-semibold">51%</span>.
+              We evaluated GLM-4.6 + mini-SWE-Agent on 2 H100 nodes with the vLLM KV-aware router: <span class="text-red-400 font-semibold">memory imbalance</span> emerges across nodes, reaching up to <span class="text-red-400 font-semibold">51%</span>.
             </p>
           </div>
 
@@ -701,9 +701,8 @@
       <div class="text-center mb-16">
         <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// The Core Innovation: Program Abstraction</span>
         <div class="h-line-yellow w-40 mx-auto mt-6 opacity-50"></div>
-        <p class="font-body text-xl text-gray-400 mt-6 max-w-3xl mx-auto">
-          Existing engines treat Agentic workflows as a stream of amnesiac requests.
-          ThunderAgent wraps them into a <span class="text-cyber-yellow font-bold">Stateful Program</span>.
+        <p class="font-body text-xl md:text-2xl text-gray-300 tracking-wide mt-6 leading-relaxed max-w-3xl mx-auto">
+          ThunderAgent wraps each agentic workflow into a <span class="text-cyber-yellow font-bold">Stateful Program</span>—the central control unit that drives scheduling, routing, and resource management across the entire system.
         </p>
       </div>
 
@@ -711,18 +710,18 @@
 
         <div class="flex flex-col gap-8">
 
-          <div class="bg-cyber-panel border border-cyber-border p-6 rounded opacity-60 hover:opacity-100 transition-opacity">
+          <div class="bg-cyber-panel border border-cyber-border p-6 rounded opacity-80 hover:opacity-100 transition-opacity">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="font-heading text-lg text-gray-500">TRADITIONAL ENGINE VIEW</h3>
-              <span class="text-xs font-mono text-red-400 border border-red-400 px-2 py-1 rounded">STATELESS</span>
+              <h3 class="font-heading text-xl text-gray-200">TRADITIONAL ENGINE VIEW</h3>
+              <span class="text-sm font-mono text-red-400 border border-red-400 px-2 py-1 rounded">STATELESS</span>
             </div>
-            <div class="flex gap-2 overflow-hidden opacity-50">
-              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-500 rounded">Req #1</div>
-              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-500 rounded">Req #2</div>
-              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-500 rounded">Req #3</div>
-              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-500 rounded">Req #4</div>
+            <div class="flex gap-2 overflow-hidden opacity-70">
+              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-sm text-gray-400 rounded">Req #1</div>
+              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-sm text-gray-400 rounded">Req #2</div>
+              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-sm text-gray-400 rounded">Req #3</div>
+              <div class="w-16 h-16 border border-gray-600 flex items-center justify-center text-sm text-gray-400 rounded">Req #4</div>
             </div>
-            <p class="text-sm font-mono text-gray-500 mt-3">
+            <p class="text-base font-mono text-gray-400 mt-3">
               > System sees isolated events.<br>
               > No knowledge of tool dependency or lifecycle.
             </p>
@@ -730,36 +729,36 @@
 
           <div class="bg-cyber-panel border border-cyber-yellow p-6 rounded relative box-glow-yellow">
             <div class="flex justify-between items-center mb-4 mt-2">
-              <h3 class="font-heading text-lg text-gray-500">THUNDERAGENT VIEW</h3>
-              <span class="text-xs font-mono text-cyber-yellow border border-cyber-yellow px-2 py-1 rounded bg-yellow-900/20 animate-pulse">STATE AWARE</span>
+              <h3 class="font-heading text-xl text-gray-200">THUNDERAGENT VIEW</h3>
+              <span class="text-sm font-mono text-cyber-yellow border border-cyber-yellow px-2 py-1 rounded bg-yellow-900/20 animate-pulse">STATE AWARE</span>
             </div>
 
             <div class="py-4 border-t border-b border-cyber-border/50 bg-black/20 px-4 rounded space-y-5">
               <div>
-                <p class="text-[10px] font-mono text-cyber-yellow/80 uppercase tracking-widest mb-2">Execution Phase (&tau;)</p>
+                <p class="text-xs font-mono text-cyber-yellow uppercase tracking-widest mb-2">Execution Phase (&tau;)</p>
                 <div class="relative flex items-center gap-3">
                   <div class="absolute top-6 left-6 right-6 h-0.5 bg-cyber-yellow/30 -z-10"></div>
 
                   <div class="flex flex-col items-center">
                     <div class="w-12 h-12 bg-cyber-yellow/20 border border-cyber-yellow rounded-full flex items-center justify-center text-cyber-yellow font-bold">R</div>
-                    <span class="text-[10px] font-mono text-gray-400 mt-1">Reason</span>
+                    <span class="text-xs font-mono text-gray-300 mt-1">Reason</span>
                   </div>
                   <div class="text-cyber-yellow/50 font-mono text-sm">&rarr;</div>
                   <div class="flex flex-col items-center">
                     <div class="w-12 h-12 bg-blue-500/20 border border-blue-400 rounded-full flex items-center justify-center text-blue-400 font-bold">A</div>
-                    <span class="text-[10px] font-mono text-gray-400 mt-1">Act (Tool)</span>
+                    <span class="text-xs font-mono text-gray-300 mt-1">Act (Tool)</span>
                   </div>
                   <div class="text-cyber-yellow/50 font-mono text-sm">&rarr;</div>
                   <div class="flex flex-col items-center">
                     <div class="w-12 h-12 bg-cyber-yellow/20 border border-cyber-yellow rounded-full flex items-center justify-center text-cyber-yellow font-bold">R</div>
-                    <span class="text-[10px] font-mono text-gray-400 mt-1">Reason</span>
+                    <span class="text-xs font-mono text-gray-300 mt-1">Reason</span>
                   </div>
                 </div>
               </div>
 
               <div>
-                <p class="text-[10px] font-mono text-cyber-yellow/80 uppercase tracking-widest mb-2">Scheduling Status (s)</p>
-                <div class="flex items-center gap-2 flex-wrap text-xs font-mono">
+                <p class="text-xs font-mono text-cyber-yellow uppercase tracking-widest mb-2">Scheduling Status (s)</p>
+                <div class="flex items-center gap-2 flex-wrap text-sm font-mono">
                   <span class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300">Active</span>
                   <span class="text-gray-500">&rarr;</span>
                   <span class="px-3 py-1.5 rounded border border-yellow-400/60 bg-yellow-500/10 text-yellow-300">Paused</span>
