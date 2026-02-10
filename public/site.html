@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThunderAgent - Fast, Simple, and Robust Agentic Inference</title>
+  <meta name="description" content="ThunderAgent is a fast, simple, and robust program-aware agentic inference system achieving 1.5-3.6x throughput improvements." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              dark: '#0a0a0f',
+              deeper: '#05050a',
+              panel: '#0d0d18',
+              border: '#1a1a2e',
+              cyan: '#00f0ff',
+              magenta: '#ff00e5',
+              pink: '#ff2d78',
+              accent: '#1a1a3e',
+            }
+          },
+          fontFamily: {
+            heading: ['Orbitron', 'sans-serif'],
+            body: ['Rajdhani', 'sans-serif'],
+            mono: ['Share Tech Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #0a0a0f;
+      color: #e0e0e8;
+      font-family: 'Rajdhani', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Neon glow utilities */
+    .glow-cyan {
+      text-shadow: 0 0 7px #00f0ff, 0 0 20px #00f0ff, 0 0 42px #00f0ff55;
+    }
+    .glow-magenta {
+      text-shadow: 0 0 7px #ff00e5, 0 0 20px #ff00e5, 0 0 42px #ff00e555;
+    }
+    .glow-pink {
+      text-shadow: 0 0 7px #ff2d78, 0 0 20px #ff2d78, 0 0 42px #ff2d7855;
+    }
+    .box-glow-cyan {
+      box-shadow: 0 0 15px #00f0ff33, 0 0 40px #00f0ff11, inset 0 0 30px #00f0ff08;
+    }
+    .box-glow-magenta {
+      box-shadow: 0 0 15px #ff00e533, 0 0 40px #ff00e511, inset 0 0 30px #ff00e508;
+    }
+    .box-glow-pink {
+      box-shadow: 0 0 15px #ff2d7833, 0 0 40px #ff2d7811, inset 0 0 30px #ff2d7808;
+    }
+
+    /* Scanline overlay */
+    .scanlines::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 240, 255, 0.015) 2px,
+        rgba(0, 240, 255, 0.015) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Grid background */
+    .cyber-grid {
+      background-image:
+        linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* Animated border */
+    .neon-border {
+      position: relative;
+    }
+    .neon-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 1px solid #00f0ff22;
+      pointer-events: none;
+    }
+
+    /* Pulse animation */
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .animate-pulse-glow {
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+
+    /* Float animation */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    .animate-float {
+      animation: float 4s ease-in-out infinite;
+    }
+
+    /* Typing cursor */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .cursor-blink::after {
+      content: '_';
+      animation: blink 1s step-end infinite;
+      color: #00f0ff;
+    }
+
+    /* Glitch effect for heading */
+    @keyframes glitch-1 {
+      0%, 100% { clip-path: inset(0 0 95% 0); transform: translate(2px, -2px); }
+      20% { clip-path: inset(30% 0 50% 0); transform: translate(-2px, 2px); }
+      40% { clip-path: inset(60% 0 20% 0); transform: translate(2px, 0); }
+      60% { clip-path: inset(10% 0 70% 0); transform: translate(-1px, 1px); }
+      80% { clip-path: inset(80% 0 5% 0); transform: translate(1px, -1px); }
+    }
+    .glitch-text {
+      position: relative;
+    }
+    .glitch-text::before,
+    .glitch-text::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .glitch-text::before {
+      color: #00f0ff;
+      animation: glitch-1 4s infinite linear alternate-reverse;
+      opacity: 0.4;
+    }
+    .glitch-text::after {
+      color: #ff00e5;
+      animation: glitch-1 3s infinite linear alternate;
+      opacity: 0.3;
+    }
+
+    /* Smooth scroll */
+    html { scroll-behavior: smooth; }
+
+    /* Nav link hover */
+    .nav-link {
+      position: relative;
+      transition: color 0.3s;
+    }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: #00f0ff;
+      box-shadow: 0 0 8px #00f0ff;
+      transition: width 0.3s;
+    }
+    .nav-link:hover::after {
+      width: 100%;
+    }
+    .nav-link:hover {
+      color: #00f0ff;
+    }
+
+    /* Feature card hover */
+    .feature-card {
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+    }
+
+    /* Horizontal line decorations */
+    .h-line-cyan {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #00f0ff, transparent);
+    }
+    .h-line-magenta {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #ff00e5, transparent);
+    }
+  </style>
+</head>
+<body class="scanlines cyber-grid">
+
+  <!-- ==================== NAVIGATION ==================== -->
+  <nav class="fixed top-0 left-0 right-0 z-50 border-b border-cyber-border" style="background: rgba(10,10,15,0.92); backdrop-filter: blur(12px);">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+      <a href="#" class="flex items-center gap-3 group">
+        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/thunderagent-RpTQBiJ9rQntjx2mxaQBtFY6yRnEIO.png" alt="ThunderAgent Logo" class="w-10 h-10 object-contain" />
+        <span class="font-heading text-lg tracking-widest text-cyber-cyan glow-cyan">THUNDERAGENT</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 font-body text-sm tracking-wider uppercase">
+        <a href="#overview" class="nav-link text-gray-400">Overview</a>
+        <a href="#features" class="nav-link text-gray-400">Features</a>
+        <a href="https://github.com/HaoKang-Timmy/ThunderAgent" target="_blank" rel="noopener noreferrer" class="nav-link text-gray-400">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ==================== HERO SECTION ==================== -->
+  <section id="overview" class="relative min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16">
+    <!-- Background decoration -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10" style="background: radial-gradient(circle, #00f0ff 0%, transparent 70%);"></div>
+      <div class="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full opacity-8" style="background: radial-gradient(circle, #ff00e5 0%, transparent 70%);"></div>
+    </div>
+
+    <div class="relative z-10 max-w-5xl mx-auto text-center">
+      <!-- Terminal-style label -->
+      <div class="inline-flex items-center gap-2 mb-6 px-4 py-2 border border-cyber-border bg-cyber-panel font-mono text-xs tracking-wider">
+        <span class="w-2 h-2 rounded-full bg-cyber-cyan animate-pulse-glow"></span>
+        <span class="text-gray-500">SYS://</span>
+        <span class="text-cyber-cyan">System-Environment Codesign</span>
+      </div>
+
+      <!-- Main heading -->
+      <h1 class="font-heading text-4xl md:text-6xl lg:text-7xl font-bold tracking-wider leading-tight mb-6">
+        <span class="glitch-text text-cyber-cyan glow-cyan" data-text="THUNDER">THUNDER</span><span class="text-cyber-magenta glow-magenta">AGENT</span>
+      </h1>
+
+      <!-- Subtitle -->
+      <p class="font-body text-xl md:text-2xl text-gray-300 tracking-wide mb-4 leading-relaxed max-w-3xl mx-auto">
+        A <span class="text-cyber-cyan font-semibold">Fast</span>,
+        <span class="text-cyber-magenta font-semibold">Simple</span>, and
+        <span class="text-cyber-pink font-semibold">Robust</span>
+        Program-Aware Agentic Inference System
+      </p>
+
+      <!-- Stats bar -->
+      <div class="flex flex-wrap justify-center gap-6 md:gap-10 mt-8 mb-12">
+        <div class="flex flex-col items-center gap-1 px-5 py-3 border border-cyber-border bg-cyber-panel">
+          <span class="font-heading text-2xl md:text-3xl font-bold text-cyber-cyan glow-cyan">1.5-3.6x</span>
+          <span class="font-mono text-xs text-gray-500 uppercase tracking-wider">Serving Throughput</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 px-5 py-3 border border-cyber-border bg-cyber-panel">
+          <span class="font-heading text-2xl md:text-3xl font-bold text-cyber-magenta glow-magenta">1.8-3.9x</span>
+          <span class="font-mono text-xs text-gray-500 uppercase tracking-wider">RL Rollout</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 px-5 py-3 border border-cyber-border bg-cyber-panel">
+          <span class="font-heading text-2xl md:text-3xl font-bold text-cyber-pink glow-pink">4.2x</span>
+          <span class="font-mono text-xs text-gray-500 uppercase tracking-wider">Disk Memory Savings</span>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="h-line-cyan w-full max-w-2xl mx-auto mb-10 opacity-40"></div>
+
+      <!-- Diagram image -->
+      <div class="relative inline-block animate-float">
+        <div class="absolute -inset-2 border border-cyber-cyan opacity-20 pointer-events-none"></div>
+        <div class="absolute -inset-4 border border-cyber-magenta opacity-10 pointer-events-none"></div>
+        <img
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-knlzuc6X87PXdz9uOZa0Aw1Jp5YOz3.png"
+          alt="ThunderAgent overview diagram showing that it is Fast (improves agentic serving throughput by 1.5-3.6x), Simple (OpenAI-compatible API, 2 lines of code for integration), and Robust (Scalable on multiple nodes and agentic workflows)."
+          class="max-w-full md:max-w-3xl rounded bg-white p-2"
+          loading="lazy"
+        />
+        <!-- Corner decorations -->
+        <div class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-cyber-cyan"></div>
+        <div class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-cyber-cyan"></div>
+        <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-cyber-magenta"></div>
+        <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-cyber-magenta"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== FEATURES SECTION ==================== -->
+  <section id="features" class="relative px-6 py-24">
+    <div class="max-w-6xl mx-auto">
+
+      <!-- Section header -->
+      <div class="text-center mb-20">
+        <span class="font-mono text-xs text-cyber-cyan tracking-widest uppercase">// Core Capabilities</span>
+        <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-wider mt-3 text-gray-100">
+          WHY <span class="text-cyber-cyan glow-cyan">THUNDER</span><span class="text-cyber-magenta glow-magenta">AGENT</span>?
+        </h2>
+        <div class="h-line-magenta w-40 mx-auto mt-6 opacity-60"></div>
+      </div>
+
+      <!-- Three feature cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+        <!-- FAST -->
+        <div class="feature-card neon-border border border-cyber-border bg-cyber-panel p-8 flex flex-col gap-5 box-glow-cyan">
+          <!-- Icon -->
+          <div class="w-14 h-14 border border-cyber-cyan flex items-center justify-center bg-cyber-dark">
+            <svg class="w-7 h-7 text-cyber-cyan" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-heading text-xl font-bold tracking-wider text-cyber-cyan glow-cyan mb-1">FAST</h3>
+            <div class="h-line-cyan w-16 mb-4 opacity-50"></div>
+          </div>
+          <p class="font-body text-gray-400 leading-relaxed text-base">
+            ThunderAgent improves agentic serving throughputs by <span class="text-cyber-cyan font-semibold">1.5-3.6x</span> compared to state-of-the-art inference systems. Our program-aware scheduler eliminates KV-cache thrashing during tool execution and resolves cross-node memory imbalances through dynamic migration.
+          </p>
+          <div class="mt-auto pt-4 border-t border-cyber-border">
+            <div class="font-mono text-xs text-gray-600">
+              <span class="text-cyber-cyan">></span> KV cache hit rate near 100%
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-cyan">></span> State-aware pause & resume
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-cyan">></span> Up to 3.9x RL rollout speedup
+            </div>
+          </div>
+        </div>
+
+        <!-- SIMPLE -->
+        <div class="feature-card neon-border border border-cyber-border bg-cyber-panel p-8 flex flex-col gap-5 box-glow-magenta">
+          <!-- Icon -->
+          <div class="w-14 h-14 border border-cyber-magenta flex items-center justify-center bg-cyber-dark">
+            <svg class="w-7 h-7 text-cyber-magenta" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-heading text-xl font-bold tracking-wider text-cyber-magenta glow-magenta mb-1">SIMPLE</h3>
+            <div class="h-line-magenta w-16 mb-4 opacity-50"></div>
+          </div>
+          <p class="font-body text-gray-400 leading-relaxed text-base">
+            Integrates with just <span class="text-cyber-magenta font-semibold">2 lines of code</span> through an OpenAI-compatible API. ThunderAgent wraps existing LLM engines and tool orchestrators, decoupling scheduling from execution backends like vLLM or SGLang.
+          </p>
+          <div class="mt-auto pt-4 border-t border-cyber-border">
+            <div class="font-mono text-xs text-gray-600">
+              <span class="text-cyber-magenta">></span> OpenAI-compatible endpoints
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-magenta">></span> Drop-in replacement
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-magenta">></span> Works with vLLM & SGLang
+            </div>
+          </div>
+        </div>
+
+        <!-- ROBUST -->
+        <div class="feature-card neon-border border border-cyber-border bg-cyber-panel p-8 flex flex-col gap-5 box-glow-pink">
+          <!-- Icon -->
+          <div class="w-14 h-14 border border-cyber-pink flex items-center justify-center bg-cyber-dark">
+            <svg class="w-7 h-7 text-cyber-pink" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-heading text-xl font-bold tracking-wider text-cyber-pink glow-pink mb-1">ROBUST</h3>
+            <div class="h-line-magenta w-16 mb-4 opacity-50"></div>
+          </div>
+          <p class="font-body text-gray-400 leading-relaxed text-base">
+            Scales seamlessly across <span class="text-cyber-pink font-semibold">multiple nodes</span> and diverse agentic workflows. The lifecycle-aware garbage collector prevents resource leakage while asynchronous environment preparation overlaps I/O with LLM reasoning.
+          </p>
+          <div class="mt-auto pt-4 border-t border-cyber-border">
+            <div class="font-mono text-xs text-gray-600">
+              <span class="text-cyber-pink">></span> Multi-node scaling
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-pink">></span> Lifecycle-aware GC
+            </div>
+            <div class="font-mono text-xs text-gray-600 mt-1">
+              <span class="text-cyber-pink">></span> 4.2x disk memory savings
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PLACEHOLDER: Problems & Solutions ==================== -->
+  <!-- Sections 2 (Problems) and 3 (Solutions) will be added next -->
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="border-t border-cyber-border px-6 py-10">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/thunderagent-RpTQBiJ9rQntjx2mxaQBtFY6yRnEIO.png" alt="ThunderAgent Logo" class="w-8 h-8 object-contain" />
+        <span class="font-mono text-xs text-gray-600 tracking-wider">THUNDERAGENT // System-Environment Codesign</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="https://github.com/HaoKang-Timmy/ThunderAgent" target="_blank" rel="noopener noreferrer" class="font-mono text-xs text-gray-500 hover:text-cyber-cyan transition-colors tracking-wider">
+          GITHUB
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
