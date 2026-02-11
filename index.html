@@ -1191,232 +1191,248 @@
         </div>
       </div>
 
-      <!-- ===== Section 4.2: Scheduler Overview ===== -->
+      <!-- ===== Section 4.2: Program-Aware Scheduler and Resource Management (Tabbed) ===== -->
       <div id="section-4-2" class="mb-32">
         <div class="flex items-center gap-4 mb-12">
           <div class="h-8 w-1 bg-cyber-gold"></div>
-          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.2: Scheduler Overview</h2>
+          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.2: Program-Aware Scheduler and Resource Management</h2>
         </div>
 
-        <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-6">
-            ThunderAgent's scheduling policy targets non-productive overhead by decomposing the total cost of agentic
-            inference into five components: <span class="text-cyber-gold font-semibold">decoding</span>, <span
-              class="text-cyber-gold font-semibold">prefilling</span>, <span
-              class="text-cyber-gold font-semibold">recomputation</span>, <span
-              class="text-cyber-gold font-semibold">unused capacity</span>, and <span
-              class="text-cyber-gold font-semibold">idle caching</span>. Among these, only decoding and prefilling
-            contribute to effective throughput — the remaining three represent wasted system overhead. The scheduler
-            minimizes these overhead costs via two primitive operations:
-          </p>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="bg-black/20 border border-red-400/30 p-6 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span
-                  class="px-3 py-1.5 rounded border border-red-400/50 bg-red-500/10 text-red-300 font-mono text-sm uppercase font-bold">Pause</span>
-              </div>
-              <p class="text-lg text-gray-300 font-body leading-relaxed">
-                Removes a program from active execution, unbinds it from its backend, releases its KV cache for
-                preemption, and sets its status to <span class="text-red-300 font-semibold">Paused</span>.
-              </p>
-            </div>
-            <div class="bg-black/20 border border-green-400/30 p-6 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span
-                  class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300 font-mono text-sm uppercase font-bold">Restore</span>
-              </div>
-              <p class="text-lg text-gray-300 font-body leading-relaxed">
-                Admits a paused program back into active execution by assigning it to a backend
-                <span class="font-mono text-cyan-400">&Lscr;'</span> with available capacity, setting its status to
-                <span class="text-green-300 font-semibold">Active</span>.
-              </p>
-            </div>
+        <div class="w-full max-w-5xl mx-auto">
+          <!-- Tab buttons -->
+          <div class="flex border-b border-cyber-border">
+            <button onclick="switchSchedTab('overview')" id="sc-tab-overview"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-cyber-gold border-cyber-gold">
+              Overview
+            </button>
+            <button onclick="switchSchedTab('monitor')" id="sc-tab-monitor"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-gold">
+              Periodic Monitor
+            </button>
+            <button onclick="switchSchedTab('queue')" id="sc-tab-queue"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-gold">
+              Global Waiting Queue
+            </button>
+            <button onclick="switchSchedTab('toolmgmt')" id="sc-tab-toolmgmt"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-gold">
+              Tool Resource Management
+            </button>
           </div>
 
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-10">
-            The scheduler coordinates three mechanisms: a <span class="text-cyber-gold font-semibold">periodic
-              monitor</span> that detects memory pressure at fixed intervals, a <span
-              class="text-cyber-gold font-semibold">global waiting queue</span> that balances load across GPU nodes,
-            and <span class="text-cyber-gold font-semibold">tool resource management</span> that reclaims
-            environments upon program termination.
-          </p>
+          <!-- Tab content panels -->
+          <div class="relative mt-0">
 
-          <!-- Full-width image below -->
-          <div
-            class="relative p-3 bg-gradient-to-br from-cyber-gold/10 to-transparent border border-cyber-gold/30 rounded-lg">
-            <img src="public/TR.png" alt="Scheduler Architecture Overview" class="w-full rounded shadow-2xl"
-              loading="lazy" />
-          </div>
-          <!-- <p class="text-sm text-gray-500 font-mono mt-3 text-center">Figure: Scheduler architecture showing
-            Restore/Pause transitions, periodic monitoring, and the global waiting queue.</p> -->
-        </div>
-      </div>
+            <!-- ===== Overview Panel (formerly 4.2) ===== -->
+            <div id="sc-panel-overview"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left"
+              style="border-top:none;">
+              <p class="font-body text-xl text-gray-300 leading-relaxed mb-6">
+                ThunderAgent's scheduling policy targets non-productive overhead by decomposing the total cost of agentic
+                inference into five components: <span class="text-cyber-gold font-semibold">decoding</span>, <span
+                  class="text-cyber-gold font-semibold">prefilling</span>, <span
+                  class="text-cyber-gold font-semibold">recomputation</span>, <span
+                  class="text-cyber-gold font-semibold">unused capacity</span>, and <span
+                  class="text-cyber-gold font-semibold">idle caching</span>. Among these, only decoding and prefilling
+                contribute to effective throughput — the remaining three represent wasted system overhead. The scheduler
+                minimizes these overhead costs via two primitive operations:
+              </p>
 
-      <!-- ===== Section 4.3: Periodic Monitor ===== -->
-      <div id="section-4-3" class="mb-32">
-        <div class="flex items-center gap-4 mb-12">
-          <div class="h-8 w-1 bg-cyber-gold"></div>
-          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.3: Periodic Monitor</h2>
-        </div>
-
-        <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
-            Unlike baseline schedulers that only check capacity upon a workflow's arrival, ThunderAgent implements a
-            <span class="text-cyber-gold font-semibold">periodic monitor</span> that evaluates the memory usage of each
-            data-parallel backend at fixed intervals <span class="font-mono text-cyber-yellow">&Delta;t</span>. This
-            enables preemptive detection of memory pressure caused by growing context lengths during decoding — even
-            without new arrivals.
-          </p>
-
-          <!-- Thrashing Detection Mechanism -->
-          <div class="bg-black/20 border border-cyber-border p-8 rounded-lg mb-8">
-            <h4 class="font-heading text-xl text-white font-bold mb-4">Thrashing Detection &amp; Hysteresis Window</h4>
-            <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-              Thrashing is detected when the total context length of all programs on a backend exceeds its KV cache
-              capacity. ThunderAgent uses a <span class="text-cyber-gold font-semibold">dual-watermark</span> mechanism
-              to stabilize scheduling decisions:
-            </p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <div class="flex items-start gap-4">
-                <div
-                  class="w-12 h-12 bg-red-500/10 border border-red-400/40 rounded-full flex items-center justify-center shrink-0">
-                  <span class="font-mono text-red-400 text-lg font-bold">&lambda;<sub>max</sub></span>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-black/20 border border-red-400/30 p-6 rounded-lg">
+                  <div class="flex items-center gap-3 mb-3">
+                    <span
+                      class="px-3 py-1.5 rounded border border-red-400/50 bg-red-500/10 text-red-300 font-mono text-sm uppercase font-bold">Pause</span>
+                  </div>
+                  <p class="text-lg text-gray-300 font-body leading-relaxed">
+                    Removes a program from active execution, unbinds it from its backend, releases its KV cache for
+                    preemption, and sets its status to <span class="text-red-300 font-semibold">Paused</span>.
+                  </p>
                 </div>
-                <div>
-                  <p class="text-lg text-gray-200 font-semibold mb-1">High Watermark</p>
-                  <p class="text-lg text-gray-400 font-body">When memory exceeds this threshold, ThunderAgent invokes
-                    <span class="text-yellow-300 font-semibold">Pause</span> to suspend active programs until usage
-                    drops below the limit.
+                <div class="bg-black/20 border border-green-400/30 p-6 rounded-lg">
+                  <div class="flex items-center gap-3 mb-3">
+                    <span
+                      class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300 font-mono text-sm uppercase font-bold">Restore</span>
+                  </div>
+                  <p class="text-lg text-gray-300 font-body leading-relaxed">
+                    Admits a paused program back into active execution by assigning it to a backend
+                    <span class="font-mono text-cyan-400">&Lscr;'</span> with available capacity, setting its status to
+                    <span class="text-green-300 font-semibold">Active</span>.
                   </p>
                 </div>
               </div>
-              <div class="flex items-start gap-4">
-                <div
-                  class="w-12 h-12 bg-green-500/10 border border-green-400/40 rounded-full flex items-center justify-center shrink-0">
-                  <span class="font-mono text-green-400 text-lg font-bold">&lambda;<sub>min</sub></span>
-                </div>
-                <div>
-                  <p class="text-lg text-gray-200 font-semibold mb-1">Low Watermark</p>
-                  <p class="text-lg text-gray-400 font-body">When memory drops below this threshold, ThunderAgent
-                    invokes <span class="text-green-300 font-semibold">Restore</span> to admit paused programs back into
-                    execution.
-                  </p>
-                </div>
+
+              <p class="font-body text-xl text-gray-300 leading-relaxed mb-10">
+                The scheduler coordinates three mechanisms: a <span class="text-cyber-gold font-semibold">periodic
+                  monitor</span> that detects memory pressure at fixed intervals, a <span
+                  class="text-cyber-gold font-semibold">global waiting queue</span> that balances load across GPU nodes,
+                and <span class="text-cyber-gold font-semibold">tool resource management</span> that reclaims
+                environments upon program termination.
+              </p>
+
+              <!-- Full-width image below -->
+              <div
+                class="relative p-3 bg-gradient-to-br from-cyber-gold/10 to-transparent border border-cyber-gold/30 rounded-lg">
+                <img src="public/TR.png" alt="Scheduler Architecture Overview" class="w-full rounded shadow-2xl"
+                  loading="lazy" />
               </div>
             </div>
-          </div>
 
-          <!-- Time-Decay & Shortest-First -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-              <h4 class="font-heading text-xl text-white font-bold mb-4">Time-Decay for Acting Programs</h4>
-              <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                During tool execution, GPU memory occupied by acting programs' KV caches sits idle. To balance the cost
-                of caching against recomputation, ThunderAgent applies an <span
-                  class="text-cyber-gold font-semibold">exponential time-decay function</span>
-                <span class="font-mono text-cyber-yellow">f(t)</span> that progressively discounts the effective memory
-                weight of acting programs. This encourages the scheduler to pause and evict long-idle contexts when
-                memory pressure rises, rather than holding them indefinitely.
+            <!-- ===== Periodic Monitor Panel (formerly 4.3) ===== -->
+            <div id="sc-panel-monitor"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+              style="border-top:none;">
+              <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
+                Unlike baseline schedulers that only check capacity upon a workflow's arrival, ThunderAgent implements a
+                <span class="text-cyber-gold font-semibold">periodic monitor</span> that evaluates the memory usage of each
+                data-parallel backend at fixed intervals <span class="font-mono text-cyber-yellow">&Delta;t</span>. This
+                enables preemptive detection of memory pressure caused by growing context lengths during decoding — even
+                without new arrivals.
               </p>
-              <div class="bg-cyber-dark border border-cyber-border p-5 rounded mt-4 text-center overflow-x-auto"
-                style="color: #e0e0e8;">
-                $$\text{C}_{\text{total}} \;<\; \sum_{p \in \mathcal{L},\, \tau=\mathbf{R}} c_p \;+\; \sum_{q \in
-                  \mathcal{L},\, \tau=\mathbf{A}} c_q \times f(t_q)$$ </div>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-                <h4 class="font-heading text-xl text-white font-bold mb-4">Shortest-First Eviction</h4>
+
+              <!-- Thrashing Detection Mechanism -->
+              <div class="bg-black/20 border border-cyber-border p-8 rounded-lg mb-8">
+                <h4 class="font-heading text-xl text-white font-bold mb-4">Thrashing Detection &amp; Hysteresis Window</h4>
                 <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                  When the scheduler needs to evict programs to free $\Delta C$ tokens of memory, ThunderAgent greedily
-                  selects programs with the <span class="text-cyber-gold font-semibold">shortest context lengths</span>.
-                  Since recomputation cost scales quadratically with token length
-                  ($\text{Cost}_{\text{recompute}} \propto c_i^2$), evicting shorter contexts minimizes the total
-                  recomputation overhead.
+                  Thrashing is detected when the total context length of all programs on a backend exceeds its KV cache
+                  capacity. ThunderAgent uses a <span class="text-cyber-gold font-semibold">dual-watermark</span> mechanism
+                  to stabilize scheduling decisions:
                 </p>
-                <p class="font-body text-lg text-gray-300 leading-relaxed">
-                  The state indicator $\mathbb{I}$ further ensures that the scheduler prioritizes pausing
-                  <span class="text-blue-400 font-semibold">Acting</span> programs (reclaiming cached memory to reduce
-                  $\text{Cost}_{\text{caching}}$) and prioritizes restoring
-                  <span class="text-cyber-yellow font-semibold">Reasoning</span> programs (maximizing effective decoding
-                  throughput).
-                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                  <div class="flex items-start gap-4">
+                    <div
+                      class="w-12 h-12 bg-red-500/10 border border-red-400/40 rounded-full flex items-center justify-center shrink-0">
+                      <span class="font-mono text-red-400 text-lg font-bold">&lambda;<sub>max</sub></span>
+                    </div>
+                    <div>
+                      <p class="text-lg text-gray-200 font-semibold mb-1">High Watermark</p>
+                      <p class="text-lg text-gray-400 font-body">When memory exceeds this threshold, ThunderAgent invokes
+                        <span class="text-yellow-300 font-semibold">Pause</span> to suspend active programs until usage
+                        drops below the limit.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-4">
+                    <div
+                      class="w-12 h-12 bg-green-500/10 border border-green-400/40 rounded-full flex items-center justify-center shrink-0">
+                      <span class="font-mono text-green-400 text-lg font-bold">&lambda;<sub>min</sub></span>
+                    </div>
+                    <div>
+                      <p class="text-lg text-gray-200 font-semibold mb-1">Low Watermark</p>
+                      <p class="text-lg text-gray-400 font-body">When memory drops below this threshold, ThunderAgent
+                        invokes <span class="text-green-300 font-semibold">Restore</span> to admit paused programs back into
+                        execution.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Time-Decay & Shortest-First -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
+                  <h4 class="font-heading text-xl text-white font-bold mb-4">Time-Decay for Acting Programs</h4>
+                  <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
+                    During tool execution, GPU memory occupied by acting programs' KV caches sits idle. To balance the cost
+                    of caching against recomputation, ThunderAgent applies an <span
+                      class="text-cyber-gold font-semibold">exponential time-decay function</span>
+                    <span class="font-mono text-cyber-yellow">f(t)</span> that progressively discounts the effective memory
+                    weight of acting programs. This encourages the scheduler to pause and evict long-idle contexts when
+                    memory pressure rises, rather than holding them indefinitely.
+                  </p>
+                  <div class="bg-cyber-dark border border-cyber-border p-5 rounded mt-4 text-center overflow-x-auto"
+                    style="color: #e0e0e8;">
+                    $$\text{C}_{\text{total}} \;<\; \sum_{p \in \mathcal{L},\, \tau=\mathbf{R}} c_p \;+\; \sum_{q \in
+                      \mathcal{L},\, \tau=\mathbf{A}} c_q \times f(t_q)$$
+                  </div>
+                </div>
+                <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
+                  <h4 class="font-heading text-xl text-white font-bold mb-4">Shortest-First Eviction</h4>
+                  <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
+                    When the scheduler needs to evict programs to free $\Delta C$ tokens of memory, ThunderAgent greedily
+                    selects programs with the <span class="text-cyber-gold font-semibold">shortest context lengths</span>.
+                    Since recomputation cost scales quadratically with token length
+                    ($\text{Cost}_{\text{recompute}} \propto c_i^2$), evicting shorter contexts minimizes the total
+                    recomputation overhead.
+                  </p>
+                  <p class="font-body text-lg text-gray-300 leading-relaxed">
+                    The state indicator $\mathbb{I}$ further ensures that the scheduler prioritizes pausing
+                    <span class="text-blue-400 font-semibold">Acting</span> programs (reclaiming cached memory to reduce
+                    $\text{Cost}_{\text{caching}}$) and prioritizes restoring
+                    <span class="text-cyber-yellow font-semibold">Reasoning</span> programs (maximizing effective decoding
+                    throughput).
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <!-- ===== Section 4.4: Global Waiting Queue ===== -->
-        <div id="section-4-4" class="mb-32">
-          <div class="flex items-center gap-4 mb-12">
-            <div class="h-8 w-1 bg-cyber-gold"></div>
-            <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.4: Global Waiting Queue</h2>
-          </div>
+            <!-- ===== Global Waiting Queue Panel (formerly 4.4) ===== -->
+            <div id="sc-panel-queue"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+              style="border-top:none;">
+              <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
+                Memory imbalance across GPU nodes introduces significant wasted capacity. Existing KV-aware routers
+                greedily pin workflows to the same node for cache locality, but this can overload some nodes while leaving others
+                idle. To address this, ThunderAgent unifies the waiting queues of all backend replicas into a single <span
+                  class="text-cyber-gold font-semibold">global program-aware waiting queue</span>.
+              </p>
 
-          <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
-              Memory imbalance across GPU nodes introduces significant wasted capacity. Existing KV-aware routers
-              greedily
-              pin workflows to the same node for cache locality, but this can overload some nodes while leaving others
-              idle. To address this, ThunderAgent unifies the waiting queues of all backend replicas into a single <span
-                class="text-cyber-gold font-semibold">global program-aware waiting queue</span>.
-            </p>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-purple-500/10 border border-purple-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                    </svg>
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
+                  <div class="flex items-center gap-3 mb-4">
+                    <div
+                      class="w-10 h-10 bg-purple-500/10 border border-purple-400/40 rounded flex items-center justify-center">
+                      <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" stroke-width="1.5"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                      </svg>
+                    </div>
+                    <h4 class="font-heading text-lg text-white font-bold">Program Transferability</h4>
                   </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Program Transferability</h4>
+                  <p class="text-lg text-gray-400 font-body leading-relaxed">
+                    Paused programs are assumed to have their KV cache evicted, making recomputation cost node-agnostic.
+                    This allows the system to direct paused programs to <span class="text-cyber-gold font-semibold">any
+                      node</span> with available capacity.
+                  </p>
                 </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed">
-                  Paused programs are assumed to have their KV cache evicted, making recomputation cost node-agnostic.
-                  This allows the system to direct paused programs to <span class="text-cyber-gold font-semibold">any
-                    node</span> with available capacity.
-                </p>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-green-500/10 border border-green-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
+                  <div class="flex items-center gap-3 mb-4">
+                    <div
+                      class="w-10 h-10 bg-green-500/10 border border-green-400/40 rounded flex items-center justify-center">
+                      <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" stroke-width="1.5"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
                     </svg>
+                    </div>
+                    <h4 class="font-heading text-lg text-white font-bold">Cross-Node Balancing</h4>
                   </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Cross-Node Balancing</h4>
+                  <p class="text-lg text-gray-400 font-body leading-relaxed">
+                    The global queue enforces memory balancing across nodes via load-balanced restore routing, while
+                    preserving locality for requests within <span class="text-cyber-gold font-semibold">active</span>
+                    programs during execution.
+                  </p>
                 </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed">
-                  The global queue enforces memory balancing across nodes via load-balanced restore routing, while
-                  preserving locality for requests within <span class="text-cyber-gold font-semibold">active</span>
-                  programs during execution.
-                </p>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-cyan-500/10 border border-cyan-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z" />
-                    </svg>
+                <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
+                  <div class="flex items-center gap-3 mb-4">
+                    <div
+                      class="w-10 h-10 bg-cyan-500/10 border border-cyan-400/40 rounded flex items-center justify-center">
+                      <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="1.5"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z" />
+                      </svg>
+                    </div>
+                    <h4 class="font-heading text-lg text-white font-bold">Bounded Waste</h4>
                   </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Bounded Waste</h4>
-                </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed mb-4">
-                  The global queue bounds unused cost for every node per monitoring period, where
-                  $c_{\min}$ is the minimum token length among paused programs:
-                </p>
-                <div class="bg-cyber-dark border border-cyber-border p-4 rounded text-center overflow-x-auto"
-                  style="color: #e0e0e8;">
-                  $$\text{Cost}_{\text{unused}} \;<\; c_{\min} \cdot \Delta t$$ </div>
+                  <p class="text-lg text-gray-400 font-body leading-relaxed mb-4">
+                    The global queue bounds unused cost for every node per monitoring period, where
+                    $c_{\min}$ is the minimum token length among paused programs:
+                  </p>
+                  <div class="bg-cyber-dark border border-cyber-border p-4 rounded text-center overflow-x-auto"
+                    style="color: #e0e0e8;">
+                    $$\text{Cost}_{\text{unused}} \;<\; c_{\min} \cdot \Delta t$$
+                  </div>
                 </div>
               </div>
 
@@ -1427,16 +1443,11 @@
                 while enabling cross-node transfers for paused programs.
               </p>
             </div>
-          </div>
 
-          <!-- ===== Section 4.5: Tool Resource Management ===== -->
-          <div id="section-4-5">
-            <div class="flex items-center gap-4 mb-12">
-              <div class="h-8 w-1 bg-cyber-gold"></div>
-              <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.5: Tool Resource Management</h2>
-            </div>
-
-            <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
+            <!-- ===== Tool Resource Management Panel (formerly 4.5) ===== -->
+            <div id="sc-panel-toolmgmt"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+              style="border-top:none;">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
                 <!-- Hook-based GC -->
                 <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
@@ -1453,8 +1464,7 @@
                   </div>
                   <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
                     ThunderAgent implements lifecycle hooks that strictly couple tool resource persistence with the
-                    program's
-                    scheduling status <span class="font-mono text-green-400">s</span>. When a program is <span
+                    program's scheduling status <span class="font-mono text-green-400">s</span>. When a program is <span
                       class="text-red-300 font-semibold">Terminated</span>, the collector triggers an immediate teardown
                     sequence — systematically reclaiming sandboxes, Docker containers, network sockets, and compute
                     slots.
@@ -1484,19 +1494,34 @@
                     initialize.
                     ThunderAgent monitors the global waiting queue; when a high-priority program approaches the restore
                     threshold, the system <span class="text-cyber-gold font-semibold">asynchronously pre-builds</span>
-                    its
-                    execution environment before GPU memory is allocated.
+                    its execution environment before GPU memory is allocated.
                   </p>
                   <p class="font-body text-lg text-gray-300 leading-relaxed">
                     This technique effectively <span class="text-cyber-gold font-semibold">hides the initialization
                       overhead</span>, significantly reducing end-to-end latency for tool-call heavy workloads like
-                    coding
-                    agents and science agents.
+                    coding agents and science agents.
                   </p>
                 </div>
               </div>
             </div>
+
           </div>
+        </div>
+
+        <script>
+          function switchSchedTab(tab) {
+            document.querySelectorAll('.sc-tab').forEach(btn => {
+              btn.className = btn.className.replace(/text-cyber-\w+/g, 'text-gray-500')
+                .replace(/border-cyber-\w+/g, 'border-transparent');
+            });
+            const activeBtn = document.getElementById('sc-tab-' + tab);
+            activeBtn.classList.remove('text-gray-500', 'border-transparent');
+            activeBtn.classList.add('text-cyber-gold', 'border-cyber-gold');
+            document.querySelectorAll('.sc-panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById('sc-panel-' + tab).classList.remove('hidden');
+          }
+        </script>
+      </div>
 
         </div>
   </section>
