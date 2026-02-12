@@ -1255,13 +1255,13 @@
                   <!-- Decorative BG -->
                   <div class="absolute top-0 right-0 w-64 h-64 bg-cyber-yellow/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                   
-                  <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-8 border-l-4 border-cyber-yellow pl-4">Motivation</h3>
+                  <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-8 text-center max-w-3xl mx-auto">Motivation</h3>
 
-                  <p class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify mb-8">
+                  <p class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto mb-8">
                     In traditional LLM serving systems, the engine views the world as a stream of <span class="text-[var(--color-status-red)] font-bold">Stateless Requests</span>. 
                     It doesn't understand that a series of requests might belong to the same Agent working on a single long-term task.
                   </p>
-                  <p class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify">
+                  <p class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto">
                     This limitation prevents intelligent resource management. On a <span class="text-[var(--color-status-red)] font-bold">Single Node</span>, the engine cannot optimize the tradeoff between GPU utilization and KV cache hits (e.g., distinguishing between a finished program and one waiting for a tool). Across <span class="text-[var(--color-status-red)] font-bold">Multiple Nodes</span>, it fails to balance workload distribution against context locality. These inefficiencies ultimately lead to suboptimal system throughput.
                   </p>
                </div>
@@ -1270,7 +1270,6 @@
             <!-- 2. WHAT Panel -->
             <div id="prog-panel-what" class="prog-panel hidden animate-fadeIn">
                <div class="bg-[var(--color-bg-base)] border border-cyber-border p-8 md:p-12 rounded-lg shadow-inner flex flex-col items-center">
-                  <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-8 self-start border-l-4 border-cyber-blue pl-4">Conceptual View</h3>
                   
                   <div class="flex flex-col gap-12 w-full max-w-3xl">
                     <!-- Old Way -->
