@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&family=Roboto+Mono:wght@300;400;500&display=swap"
     rel="stylesheet" />
   <!-- KaTeX for math rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -20,43 +20,116 @@
     onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class', // Enable class-based dark mode
       theme: {
         extend: {
           colors: {
             cyber: {
-              dark: '#1a1a2e',
-              deeper: '#12121f',
-              panel: '#1e1e35',
-              border: '#2a2a45',
-              yellow: '#9E6A2F',
-              gold: '#9E6A2F',
-              amber: '#9E6A2F',
-              steel: '#A0A0B8',
+              dark: 'var(--color-bg-base)',
+              deeper: 'var(--color-bg-deeper)',
+              panel: 'var(--color-bg-panel)',
+              border: 'var(--color-border)',
+              yellow: 'var(--color-primary)',
+              gold: 'var(--color-primary)',
+              amber: 'var(--color-primary)',
+              steel: 'var(--color-text-muted)',
               chrome: '#C8C8D8',
-              silver: '#C0C8D0',
+              silver: 'var(--color-accent-blue)',
               red: '#FF003C',
             }
           },
           fontFamily: {
-            heading: ['Orbitron', 'sans-serif'],
-            body: ['Rajdhani', 'sans-serif'],
-            mono: ['Share Tech Mono', 'monospace'],
+            heading: ['var(--font-heading)', 'sans-serif'],
+            body: ['var(--font-body)', 'sans-serif'],
+            mono: ['var(--font-mono)', 'monospace'],
           }
         }
       }
     }
   </script>
   <style>
+    :root {
+      /* === DARK THEME (DEFAULT) === */
+      --color-bg-base: #1a1a2e;
+      --color-bg-deeper: #12121f;
+      --color-bg-panel: #1e1e35;
+      --color-border: #2a2a45;
+
+      --color-primary: #E2C044;
+      /* Gold */
+      --color-accent-blue: #C0C8D0;
+      /* Silver */
+
+      --color-text-main: #e0e0e8;
+      --color-text-muted: #a0a0b8;
+
+      --grid-color: rgba(252, 238, 9, 0.05);
+      --scanline-color: rgba(252, 238, 9, 0.02);
+
+      /* === FONTS === */
+      --font-body: 'Rajdhani', sans-serif;
+      --font-heading: 'Orbitron', sans-serif;
+      --font-mono: 'Share Tech Mono', monospace;
+
+      /* === STATUS COLORS (DARK) === */
+      --color-status-green: #86efac;
+      /* green-300 */
+      --color-status-red: #fca5a5;
+      /* red-300 */
+      --color-status-yellow: #fde047;
+      /* yellow-300 */
+      --color-status-blue: #60a5fa;
+      /* blue-400 */
+    }
+
+    [data-theme="light"] {
+      /* === LIGHT THEME === */
+      --color-bg-base: #f0f2f5;
+      /* Very Light Grey */
+      --color-bg-deeper: #e2e8f0;
+      /* Slightly Darker Grey */
+      --color-bg-panel: #ffffff;
+      /* Pure White Mode */
+      --color-border: #cbd5e1;
+      /* Light Border */
+
+      --color-primary: #eab308;
+      /* Even Brighter Yellow-500 */
+      --color-accent-blue: #475569;
+      /* Slate Blue */
+
+      --color-text-main: #1e293b;
+      /* Dark Slate */
+      --color-text-muted: #64748b;
+      /* Muted Slate */
+
+      --grid-color: rgba(0, 0, 0, 0.05);
+      /* Black grid */
+      --scanline-color: rgba(0, 0, 0, 0.01);
+
+      /* === STATUS COLORS (LIGHT) === */
+      --color-status-green: #15803d;
+      /* green-700 */
+      --color-status-red: #b91c1c;
+      /* red-700 */
+      --color-status-yellow: #b45309;
+      /* amber-700 */
+      --color-status-blue: #1d4ed8;
+      /* blue-700 */
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+      /* Smooth transition */
     }
 
     body {
-      background-color: #1a1a2e;
-      color: #e0e0e8;
-      font-family: 'Rajdhani', sans-serif;
+      background-color: var(--color-bg-base);
+      color: var(--color-text-main);
+      font-family: var(--font-body);
       overflow-x: hidden;
     }
 
@@ -104,8 +177,8 @@
       background: repeating-linear-gradient(0deg,
           transparent,
           transparent 2px,
-          rgba(252, 238, 9, 0.008) 2px,
-          rgba(252, 238, 9, 0.008) 4px);
+          var(--scanline-color) 2px,
+          var(--scanline-color) 4px);
       pointer-events: none;
       z-index: 9999;
     }
@@ -113,8 +186,8 @@
     /* === GRID BACKGROUND === */
     .cyber-grid {
       background-image:
-        linear-gradient(rgba(252, 238, 9, 0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(252, 238, 9, 0.02) 1px, transparent 1px);
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
       background-size: 60px 60px;
     }
 
@@ -127,7 +200,8 @@
       content: '';
       position: absolute;
       inset: 0;
-      border: 1px solid #9E6A2F18;
+      border: 1px solid var(--color-primary);
+      opacity: 0.15;
       pointer-events: none;
     }
 
@@ -171,8 +245,8 @@
       0%,
       100% {
         opacity: 1;
-        text-shadow: 0 0 10px #FCEE09, 0 0 30px #FCEE09, 0 0 60px #FCEE09, 0 0 100px #FCEE0966;
-        color: #FCEE09;
+        text-shadow: 0 0 10px var(--color-primary), 0 0 30px var(--color-primary), 0 0 60px var(--color-primary), 0 0 100px rgba(252, 238, 9, 0.4);
+        color: var(--color-primary);
       }
 
       4% {
@@ -183,26 +257,26 @@
 
       5% {
         opacity: 1;
-        text-shadow: 0 0 20px #FCEE09, 0 0 50px #FCEE09, 0 0 90px #FCEE09;
+        text-shadow: 0 0 20px var(--color-primary), 0 0 50px var(--color-primary), 0 0 90px var(--color-primary);
         color: #FFFDE0;
       }
 
       6% {
         opacity: 0.8;
-        text-shadow: 0 0 5px #FCEE09;
+        text-shadow: 0 0 5px var(--color-primary);
         color: #F5D300;
       }
 
       7% {
         opacity: 1;
-        text-shadow: 0 0 10px #FCEE09, 0 0 30px #FCEE09, 0 0 60px #FCEE09, 0 0 100px #FCEE0966;
-        color: #FCEE09;
+        text-shadow: 0 0 10px var(--color-primary), 0 0 30px var(--color-primary), 0 0 60px var(--color-primary), 0 0 100px rgba(252, 238, 9, 0.4);
+        color: var(--color-primary);
       }
 
       38% {
         opacity: 1;
-        text-shadow: 0 0 10px #FCEE09, 0 0 30px #FCEE09, 0 0 60px #FCEE09, 0 0 100px #FCEE0966;
-        color: #FCEE09;
+        text-shadow: 0 0 10px var(--color-primary), 0 0 30px var(--color-primary), 0 0 60px var(--color-primary), 0 0 100px rgba(252, 238, 9, 0.4);
+        color: var(--color-primary);
       }
 
       40% {
@@ -332,13 +406,13 @@
     }
 
     .glitch-text::before {
-      color: #9E6A2F;
+      color: #E2C044;
       animation: glitch-1 4s infinite linear alternate-reverse;
       opacity: 0.3;
     }
 
     .glitch-text::after {
-      color: #9E6A2F;
+      color: #E2C044;
       animation: glitch-1 3s infinite linear alternate;
       opacity: 0.2;
     }
@@ -361,7 +435,7 @@
       left: 0;
       width: 0;
       height: 1px;
-      background: #9E6A2F;
+      background: #E2C044;
       box-shadow: none;
       transition: width 0.3s;
     }
@@ -371,7 +445,7 @@
     }
 
     .nav-link:hover {
-      color: #9E6A2F;
+      color: #E2C044;
     }
 
     /* === FEATURE CARD HOVER === */
@@ -386,17 +460,17 @@
     /* === DECORATIVE LINES === */
     .h-line-yellow {
       height: 1px;
-      background: linear-gradient(90deg, transparent, #9E6A2F, transparent);
+      background: linear-gradient(90deg, transparent, #E2C044, transparent);
     }
 
     .h-line-gold {
       height: 1px;
-      background: linear-gradient(90deg, transparent, #9E6A2F, transparent);
+      background: linear-gradient(90deg, transparent, #E2C044, transparent);
     }
 
     .h-line-amber {
       height: 1px;
-      background: linear-gradient(90deg, transparent, #9E6A2F, transparent);
+      background: linear-gradient(90deg, transparent, #E2C044, transparent);
     }
 
     /* === BLOG SECTION STYLES === */
@@ -411,13 +485,13 @@
     }
 
     .challenge-card {
-      border-left: 3px solid #9E6A2F;
+      border-left: 3px solid #E2C044;
       transition: transform 0.2s, border-color 0.3s;
     }
 
     .challenge-card:hover {
       transform: translateX(4px);
-      border-color: #9E6A2F;
+      border-color: #E2C044;
     }
 
     .solution-card {
@@ -427,12 +501,91 @@
 
     .solution-card:hover {
       transform: translateX(4px);
-      border-color: #9E6A2F;
+      border-color: #E2C044;
     }
 
     /* === STAT NUMBER COUNTER-LIKE STYLE === */
     .stat-number {
       font-variant-numeric: tabular-nums;
+    }
+
+    /* === RIGHT SIDEBAR TOC === */
+    .toc-sidebar {
+      position: fixed;
+      top: 50%;
+      right: 16px;
+      transform: translateY(-50%);
+      z-index: 100;
+      max-height: 70vh;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .toc-sidebar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #606080;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      border-right: 2px solid transparent;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .toc-item:hover {
+      color: var(--color-primary);
+      border-right-color: var(--color-primary);
+      opacity: 0.8;
+    }
+
+    .toc-item.active {
+      color: var(--color-primary);
+      border-right-color: var(--color-primary);
+    }
+
+    .toc-item .toc-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #404060;
+      flex-shrink: 0;
+      transition: all 0.3s ease;
+    }
+
+    .toc-item:hover .toc-dot {
+      background: var(--color-primary);
+      box-shadow: 0 0 6px var(--color-primary);
+    }
+
+    .toc-item.active .toc-dot {
+      background: var(--color-primary);
+      box-shadow: 0 0 8px var(--color-primary);
+      width: 7px;
+      height: 7px;
+    }
+
+    .toc-sub {
+      padding-left: 24px;
+      font-size: 10px;
+    }
+
+    .toc-sub .toc-dot {
+      width: 4px;
+      height: 4px;
+    }
+
+    @media (max-width: 1280px) {
+      .toc-sidebar {
+        display: none;
+      }
     }
   </style>
 </head>
@@ -441,7 +594,7 @@
 
   <!-- ==================== NAVIGATION ==================== -->
   <nav class="fixed top-0 left-0 right-0 z-50 border-b border-cyber-border"
-    style="background: rgba(26,26,46,0.94); backdrop-filter: blur(12px);">
+    style="background: var(--color-bg-base); backdrop-filter: blur(12px);">
     <div class="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
       <a href="#" class="flex items-center gap-3 group">
         <img
@@ -449,7 +602,7 @@
           alt="ThunderAgent Logo" class="w-10 h-10 object-contain" />
         <span class="font-heading text-lg tracking-widest text-cyber-yellow glow-yellow">THUNDERAGENT</span>
       </a>
-      <div class="hidden md:flex items-center gap-6 font-body text-lg tracking-wider uppercase">
+      <div class="hidden md:flex items-center gap-6 font-body text-xl tracking-wider uppercase">
         <a href="https://github.com/HaoKang-Timmy/ThunderAgent" target="_blank" rel="noopener noreferrer"
           class="nav-link text-cyber-yellow font-semibold flex items-center gap-1.5" style="text-shadow: none;">
           <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -466,7 +619,8 @@
           </svg>
           Wiki
         </a>
-        <a href="#" class="nav-link text-cyber-amber font-semibold flex items-center gap-1.5"
+        <a href="https://github.com/HaoKang-Timmy/ThunderAgent/blob/main/assets/paper/_Arxiv__ThunderAgent.pdf"
+          target="_blank" class="nav-link text-cyber-amber font-semibold flex items-center gap-1.5"
           style="text-shadow: none;">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -474,6 +628,66 @@
           </svg>
           Paper
         </a>
+        <a href="https://github.com/HaoKang-Timmy/ThunderAgent" target="_blank" rel="noopener noreferrer"
+          class="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-cyber-yellow/60 bg-cyber-yellow/10 hover:bg-cyber-yellow/25 text-cyber-yellow font-semibold transition-all duration-300 text-sm tracking-wider"
+          style="text-shadow: none;">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M12 .587l3.668 7.568L24 9.306l-6 5.862 1.416 8.245L12 19.446l-7.416 3.967L6 15.168 0 9.306l8.332-1.151z" />
+          </svg>
+          Star on GitHub
+        </a>
+
+        <!-- Theme Toggle Button -->
+        <button id="theme-toggle" aria-label="Toggle Dark Mode"
+          class="p-2 ml-2 rounded-full hover:bg-white/10 transition-colors duration-200">
+          <!-- Sun Icon (for Dark Mode) -->
+          <svg id="sun-icon" class="w-6 h-6 text-cyber-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+            </path>
+          </svg>
+          <!-- Moon Icon (for Light Mode, hidden by default) -->
+          <svg id="moon-icon" class="w-6 h-6 text-cyber-yellow hidden" fill="none" stroke="currentColor"
+            viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+          </svg>
+        </button>
+
+        <!-- Font Selection Dropdown -->
+        <div class="relative ml-2 group py-2">
+          <button id="font-btn" aria-label="Select Font"
+            class="p-2 rounded-full hover:bg-white/10 transition-colors duration-200 text-cyber-yellow flex items-center font-mono text-sm border border-cyber-yellow/30">
+            <span class="mr-1">Aa</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+
+          <!-- Invisible bridge to prevent hover loss -->
+          <div class="absolute right-0 top-full w-full h-2 bg-transparent"></div>
+
+          <div
+            class="absolute right-0 top-[calc(100%+0.5rem)] mt-0 w-48 bg-[var(--color-bg-panel)] border border-[var(--color-border)] rounded-lg shadow-xl overflow-hidden hidden group-hover:block z-50">
+            <button onclick="changeFont('cyber')"
+              class="w-full text-left px-4 py-3 hover:bg-[var(--color-bg-base)] text-[var(--color-text-main)] transition-colors font-body text-sm border-b border-[var(--color-border)]">
+              <span class="font-bold block mb-0.5" style="font-family: 'Orbitron', sans-serif">CYBER</span>
+              <span class="text-xs opacity-70" style="font-family: 'Rajdhani', sans-serif">Orbitron & Rajdhani</span>
+            </button>
+            <button onclick="changeFont('clean')"
+              class="w-full text-left px-4 py-3 hover:bg-[var(--color-bg-base)] text-[var(--color-text-main)] transition-colors font-sans text-sm border-b border-[var(--color-border)]">
+              <span class="font-bold block mb-0.5" style="font-family: 'Inter', sans-serif">CLEAN</span>
+              <span class="text-xs opacity-70" style="font-family: 'Inter', sans-serif">Inter & Roboto</span>
+            </button>
+            <button onclick="changeFont('mono')"
+              class="w-full text-left px-4 py-3 hover:bg-[var(--color-bg-base)] text-[var(--color-text-main)] transition-colors font-mono text-sm">
+              <span class="font-bold block mb-0.5" style="font-family: 'Roboto Mono', monospace">MONO</span>
+              <span class="text-xs opacity-70" style="font-family: 'Roboto Mono', monospace">Terminal Style</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </nav>
@@ -483,15 +697,15 @@
     <!-- Background lightning decorations -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
       <div class="absolute top-1/4 left-1/3 w-96 h-96 rounded-full opacity-[0.07]"
-        style="background: radial-gradient(circle, #9E6A2F 0%, transparent 70%);"></div>
+        style="background: radial-gradient(circle, #E2C044 0%, transparent 70%);"></div>
       <div class="absolute bottom-1/3 right-1/4 w-80 h-80 rounded-full opacity-[0.05]"
-        style="background: radial-gradient(circle, #9E6A2F 0%, transparent 70%);"></div>
+        style="background: radial-gradient(circle, #E2C044 0%, transparent 70%);"></div>
       <!-- Lightning SVG decorations -->
       <svg class="absolute top-20 left-[10%] w-16 h-48 lightning-bolt" viewBox="0 0 40 120" fill="none">
-        <path d="M20 0 L8 55 L18 50 L5 120 L25 60 L15 65 Z" fill="#9E6A2F" opacity="0.4" />
+        <path d="M20 0 L8 55 L18 50 L5 120 L25 60 L15 65 Z" fill="#E2C044" opacity="0.4" />
       </svg>
       <svg class="absolute top-32 right-[15%] w-12 h-36 lightning-bolt-2" viewBox="0 0 40 120" fill="none">
-        <path d="M20 0 L8 55 L18 50 L5 120 L25 60 L15 65 Z" fill="#9E6A2F" opacity="0.3" />
+        <path d="M20 0 L8 55 L18 50 L5 120 L25 60 L15 65 Z" fill="#E2C044" opacity="0.3" />
       </svg>
     </div>
 
@@ -510,7 +724,8 @@
       </div>
 
       <!-- Subtitle -->
-      <p class="font-body text-xl md:text-2xl text-gray-300 tracking-wide mb-4 leading-relaxed max-w-3xl mx-auto">
+      <p class="text-xl md:text-2xl text-[var(--color-text-main)] tracking-wide mb-4 leading-loose tracking-wide max-w-3xl mx-auto max-w-3xl mx-auto"
+        style="font-family: 'Rajdhani', sans-serif;">
         A <span class="text-cyber-yellow font-semibold">Fast</span>,
         <span class="text-cyber-gold font-semibold">Simple</span>, and
         <span class="text-cyber-silver font-semibold">Robust</span>
@@ -521,32 +736,36 @@
       <!-- Stats bar -->
       <div class="flex flex-wrap justify-center gap-6 md:gap-10 mt-4 mb-12">
         <div
-          class="flex flex-col items-center gap-1 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-yellow">
+          class="flex flex-col items-center justify-center gap-1 w-72 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-yellow text-center">
           <span
             class="font-heading text-2xl md:text-3xl font-bold text-cyber-yellow glow-yellow stat-number">1.5-3.9×</span>
-          <span class="font-heading text-sm text-gray-200 uppercase tracking-wider font-bold">Inference
+          <span class="font-heading text-sm text-[var(--color-text-main)] uppercase tracking-wider font-bold">Inference
             Throughput</span>
         </div>
-        <div class="flex flex-col items-center gap-1 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-gold">
+        <div
+          class="flex flex-col items-center justify-center gap-1 w-72 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-gold text-center">
           <span class="font-heading text-2xl md:text-3xl font-bold text-cyber-gold glow-gold stat-number">2</span>
-          <span class="font-heading text-xl font-bold text-gray-200 tracking-wide">Lines of Code to Integrate</span>
+          <span class="font-heading text-sm text-[var(--color-text-main)] uppercase tracking-wider font-bold">Lines of
+            Code to Integrate</span>
         </div>
         <div
-          class="flex flex-col items-center gap-1 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-amber">
+          class="flex flex-col items-center justify-center gap-1 w-72 px-6 py-4 border border-cyber-border bg-cyber-panel box-glow-amber text-center">
           <span class="font-heading text-2xl md:text-3xl font-bold stat-number"
             style="color: #C0C8D0; text-shadow: 0 0 8px rgba(192,200,208,0.5);">4.2×</span>
-          <span class="font-heading text-sm text-gray-200 uppercase tracking-wider font-bold">Disk Memory Savings</span>
+          <span class="font-heading text-sm text-[var(--color-text-main)] uppercase tracking-wider font-bold">Disk
+            Memory Savings</span>
         </div>
       </div>
 
       <!-- Divider -->
-      <div class="h-line-yellow w-full max-w-2xl mx-auto mb-10 opacity-40"></div>
+      <div class="h-line-yellow w-full max-w-3xl mx-auto mb-10 opacity-40"></div>
 
       <!-- Fast / Simple / Robust Tabs -->
       <div class="text-center mb-8">
-        <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// Section 1: Highlights</span>
+        <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// Section 1: Fast, Simple, and
+          Robust</span>
       </div>
-      <div class="w-full max-w-3xl mx-auto">
+      <div class="w-full max-w-5xl mx-auto">
         <!-- Tab buttons -->
         <div class="flex border-b border-cyber-border">
           <button onclick="switchTab('fast')" id="tab-fast"
@@ -559,7 +778,7 @@
             FAST
           </button>
           <button onclick="switchTab('simple')" id="tab-simple"
-            class="hero-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-gold">
+            class="hero-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-gold">
             <svg class="w-5 h-5 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5"
               viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round"
@@ -568,7 +787,7 @@
             SIMPLE
           </button>
           <button onclick="switchTab('robust')" id="tab-robust"
-            class="hero-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-silver">
+            class="hero-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-silver">
             <svg class="w-5 h-5 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5"
               viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round"
@@ -584,33 +803,37 @@
           <div id="panel-fast"
             class="tab-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left"
             style="border-top:none;">
-            <div class="flex items-center gap-3 mb-4">
+            <div class="flex items-center justify-center gap-3 mb-4">
               <span class="font-heading text-3xl font-bold text-cyber-yellow glow-yellow">1.5-3.6×</span>
-              <span class="font-heading text-xl font-bold text-gray-200 tracking-wide">Serving Throughput
+              <span class="font-heading text-xl font-bold text-[var(--color-text-main)] tracking-wide">Serving
+                Throughput
                 Improvement</span>
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               We evaluated multiple agentic workflows on a single 8×H100 node, ranging from mini-SWEAgent and OpenHands
               — which have lightweight and predictable tool calls — to ToolOrchestra, which involves long and
               unpredictable remote API tool calls. Results show that ThunderAgent improves vLLM throughput across
               agentic serving scenarios by <span class="text-cyber-yellow">1.5–3.6×</span>.
             </p>
             <div class="mt-4 text-center">
-              <img src="max_throughput_bar.png" alt="High Concurrency Agentic Serving Throughput Speedup"
+              <img src="max_throughput_bar.png?v=2" alt="High Concurrency Agentic Serving Throughput Speedup"
                 class="max-w-full rounded" loading="lazy" />
             </div>
 
-            <div class="flex items-center gap-3 mt-10 mb-4">
+            <div class="flex items-center justify-center gap-3 mt-10 mb-4">
               <span class="font-heading text-3xl font-bold text-cyber-yellow glow-yellow">1.8-3.9×</span>
-              <span class="font-heading text-xl font-bold text-gray-200 tracking-wide">RL Rollout Throughput
+              <span class="font-heading text-xl font-bold text-[var(--color-text-main)] tracking-wide">RL Rollout
+                Throughput
                 Improvement</span>
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               We evaluated mini-SWEAgent and OpenHands on 2 8×H100 nodes. Results show that ThunderAgent improves vLLM
               throughput across agentic RL rollout scenarios by <span class="text-cyber-yellow">1.8–3.9×</span>.
             </p>
             <div class="mt-4 text-center">
-              <img src="rl_rollout_bar.png" alt="High Concurrency Agentic RL Rollout Throughput Speedup"
+              <img src="rl_rollout_bar.png?v=2" alt="High Concurrency Agentic RL Rollout Throughput Speedup"
                 class="max-w-full rounded" loading="lazy" />
             </div>
           </div>
@@ -619,25 +842,30 @@
           <div id="panel-simple"
             class="tab-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
             style="border-top:none;">
-            <div class="flex items-center gap-3 mb-4">
+            <div class="flex items-center justify-center gap-3 mb-4">
               <span class="font-heading text-3xl font-bold text-cyber-gold glow-gold">2 Lines</span>
-              <span class="font-heading text-xl font-bold text-gray-200 tracking-wide">of Code to Integrate</span>
+              <span class="font-heading text-xl font-bold text-[var(--color-text-main)] tracking-wide">of Code to
+                Integrate</span>
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               ThunderAgent provides a fully <span class="text-cyber-gold font-semibold">OpenAI-compatible API</span>.
               Just add a <span class="font-mono text-cyber-gold">program_id</span> to your existing API calls. It wraps
               existing LLM engines and tool orchestrators, decoupling scheduling from execution backends.
             </p>
             <div class="bg-cyber-dark border border-cyber-border p-5 font-mono text-sm overflow-x-auto">
-              <div class="text-gray-500"># Just add program_id to your existing calls</div>
-              <div class="mt-1"><span class="text-gray-400">extra_body</span> = {<span
+              <div class="text-[var(--color-text-muted)]"># Just add program_id to your existing calls</div>
+              <div class="mt-1"><span class="text-[var(--color-text-muted)]">extra_body</span> = {<span
                   class="text-cyber-gold">"program_id"</span>: <span class="text-cyber-amber">"unique_id"</span>}</div>
-              <div class="mt-2"><span class="text-gray-400">openai.client.chat.completions.create(</span></div>
-              <div class="pl-4 text-gray-400">model=<span class="text-cyber-amber">"your-model"</span>,</div>
-              <div class="pl-4 text-gray-400">messages=messages,</div>
-              <div class="pl-4 text-gray-400">extra_body=extra_body <span class="text-cyber-gold"> # ← that's it!</span>
+              <div class="mt-2"><span
+                  class="text-[var(--color-text-muted)]">openai.client.chat.completions.create(</span></div>
+              <div class="pl-4 text-[var(--color-text-muted)]">model=<span class="text-cyber-amber">"your-model"</span>,
               </div>
-              <div class="text-gray-400">)</div>
+              <div class="pl-4 text-[var(--color-text-muted)]">messages=messages,</div>
+              <div class="pl-4 text-[var(--color-text-muted)]">extra_body=extra_body <span class="text-cyber-gold"> # ←
+                  that's it!</span>
+              </div>
+              <div class="text-[var(--color-text-muted)]">)</div>
             </div>
           </div>
 
@@ -646,31 +874,42 @@
             class="tab-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
             style="border-top:none;">
             <!-- Point 1: Robust to High-concurrency -->
-            <div class="flex items-center gap-3 mb-4">
+            <div class="flex items-center justify-center gap-3 mb-4">
               <span class="font-heading text-3xl font-bold"
                 style="color: #C0C8D0; text-shadow: 0 0 8px rgba(192,200,208,0.5);">Robust to High-Concurrency
                 Workloads</span>
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               ThunderAgent maintains maximum achievable throughput even as the number of parallel workflows scales
-              beyond GPU memory limits. Baseline systems suffer severe throughput collapse once the workload exceeds
+              beyond GPU memory limits.
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+              Baseline systems suffer severe throughput collapse once the workload exceeds
               memory capacity, while ThunderAgent automatically adapts to the maximum available capacity with no need of
-              manual tuning. This makes it reliable for real-world deployments where workload patterns are
+              manual tuning.
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+              This makes it reliable for real-world deployments where workload patterns are
               unpredictable.
             </p>
             <div class="mt-4 text-center">
-              <img src="big_6panel.png" alt="Throughput across different concurrency levels"
+              <img src="big_6panel.png?v=2" alt="Throughput across different concurrency levels"
                 class="max-w-full rounded" loading="lazy" />
             </div>
 
             <!-- Point 2: Dynamic Resource Reclaim -->
-            <div class="flex items-center gap-3 mt-10 mb-4">
+            <div class="flex items-center justify-center gap-3 mt-10 mb-4">
               <span class="font-heading text-3xl font-bold"
                 style="color: #C0C8D0; text-shadow: 0 0 8px rgba(192,200,208,0.5);">4.2×</span>
-              <span class="font-heading text-xl font-bold text-gray-200 tracking-wide">Disk Memory Savings via Dynamic
+              <span class="font-heading text-xl font-bold text-[var(--color-text-main)] tracking-wide">Disk Memory
+                Savings via Dynamic
                 Resource Reclaim</span>
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               ThunderAgent's lifecycle-aware garbage collector dynamically reclaims tool resources, such as Docker
               containers and temporary files, from completed workflows, preventing unused resources from accumulating
               and occupying disk space during long-running rollouts.
@@ -690,7 +929,7 @@
 
           // Reset all tabs
           document.querySelectorAll('.hero-tab').forEach(btn => {
-            btn.className = btn.className.replace(/text-cyber-\w+/g, 'text-gray-500')
+            btn.className = btn.className.replace(/text-cyber-\w+/g, 'text-[var(--color-text-muted)]')
               .replace(/border-cyber-\w+/g, 'border-transparent')
               .replace(/glow-\w+/g, '');
           });
@@ -698,7 +937,7 @@
           // Activate selected tab
           const activeBtn = document.getElementById('tab-' + tab);
           const c = colors[tab];
-          activeBtn.classList.remove('text-gray-500', 'border-transparent');
+          activeBtn.classList.remove('text-[var(--color-text-muted)]', 'border-transparent');
           activeBtn.classList.add(c.text, c.border, c.glow);
 
           // Toggle panels
@@ -713,11 +952,12 @@
   <section id="abstract" class="relative px-6 py-20">
     <div class="max-w-4xl mx-auto">
       <div class="text-center mb-12">
-        <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// Section 2: Overview</span>
+        <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// Section 2: Architecture Overview
+          and user manual</span>
         <div class="h-line-yellow w-40 mx-auto mt-6 opacity-50"></div>
       </div>
 
-      <div class="w-full max-w-3xl mx-auto">
+      <div class="w-full max-w-5xl mx-auto">
         <!-- Tab buttons -->
         <div class="flex border-b border-cyber-border">
           <button onclick="switchOverviewTab('architecture')" id="ov-tab-architecture"
@@ -730,7 +970,7 @@
             ARCHITECTURE
           </button>
           <button onclick="switchOverviewTab('howto')" id="ov-tab-howto"
-            class="ov-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-cyber-gold">
+            class="ov-tab flex-1 py-4 px-6 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-gold">
             <svg class="w-5 h-5 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" stroke-width="1.5"
               viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round"
@@ -746,7 +986,8 @@
           <div id="ov-panel-architecture"
             class="ov-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left"
             style="border-top:none;">
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-6">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               ThunderAgent sits between agent clients and the infrastructure layer as an <span
                 class="text-cyber-yellow font-semibold">agentic workflow scheduler</span>. It improves inference
               throughput of vLLM/SGLang across multiple GPU nodes through program-aware scheduling, and provides a
@@ -762,14 +1003,16 @@
           <div id="ov-panel-howto"
             class="ov-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
             style="border-top:none;">
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               Using ThunderAgent requires an LLM serving engine. Here we give an example of serving an agent with <span
                 class="text-cyber-gold font-semibold">vLLM</span> + <span
                 class="text-cyber-gold font-semibold">Qwen3-32B</span>.
             </p>
-            <p class="font-body text-lg text-gray-300 leading-relaxed mb-5">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               In this example:
-            <ul class="list-disc list-inside text-gray-300 ml-4 mb-4">
+            <ul class="list-disc list-inside text-[var(--color-text-main)] ml-4 mb-4">
               <li><span class="text-cyber-gold font-semibold">vLLM Server (Port 8000)</span>: Accepts inference
                 requests.</li>
               <li><span class="text-cyber-gold font-semibold">ThunderAgent Router (Port 9000)</span>: Accepts
@@ -778,7 +1021,8 @@
             </p>
 
             <!-- Step 1: Install -->
-            <p class="font-heading text-lg text-gray-200 font-bold mb-3 mt-2">Step 1 &mdash; Install vLLM &amp;
+            <p class="font-heading text-lg text-[var(--color-text-main)] font-bold mb-3 mt-2">Step 1 &mdash; Install
+              vLLM &amp;
               ThunderAgent</p>
             <div class="bg-cyber-dark border border-cyber-border p-5 font-mono text-sm overflow-x-auto mb-6">
               <div><span class="text-cyber-yellow">pip install</span> vllm</div>
@@ -789,17 +1033,20 @@
             </div>
 
             <!-- Step 2: Start vLLM -->
-            <p class="font-heading text-lg text-gray-200 font-bold mb-3">Step 2 &mdash; Start vLLM </p>
+            <p class="font-heading text-lg text-[var(--color-text-main)] font-bold mb-3">Step 2 &mdash; Start vLLM </p>
             <div class="bg-cyber-dark border border-cyber-border p-5 font-mono text-sm overflow-x-auto mb-6">
-              <div class="text-gray-500"># Start vLLM server on port <span class="text-cyber-yellow">8000</span></div>
+              <div class="text-[var(--color-text-muted)]"># Start vLLM server on port <span
+                  class="text-cyber-yellow">8000</span></div>
               <div><span class="text-cyber-yellow">vllm serve</span> Qwen/Qwen3-32B --port <span
                   class="text-cyber-yellow">8000</span></div>
             </div>
 
             <!-- Step 3: Start ThunderAgent -->
-            <p class="font-heading text-lg text-gray-200 font-bold mb-3">Step 3 &mdash; Start ThunderAgent</p>
+            <p class="font-heading text-lg text-[var(--color-text-main)] font-bold mb-3">Step 3 &mdash; Start
+              ThunderAgent</p>
             <div class="bg-cyber-dark border border-cyber-border p-5 font-mono text-sm overflow-x-auto mb-6">
-              <div class="text-gray-500"># Start ThunderAgent on port <span class="text-cyber-yellow">9000</span>,
+              <div class="text-[var(--color-text-muted)]"># Start ThunderAgent on port <span
+                  class="text-cyber-yellow">9000</span>,
                 and connect it to vLLM at port 8000</div>
               <div><span class="text-cyber-yellow">thunderagent</span> --backend-type vllm --backends
                 http://localhost:<span class="text-cyber-yellow">8000</span> --port <span
@@ -807,11 +1054,14 @@
             </div>
 
             <!-- Step 4: Send request -->
-            <p class="font-heading text-lg text-gray-200 font-bold mb-3">Step 4 &mdash; Send requests to ThunderAgent
+            <p class="font-heading text-lg text-[var(--color-text-main)] font-bold mb-3">Step 4 &mdash; Send requests to
+              ThunderAgent
               Router</p>
             <div class="bg-cyber-dark border border-cyber-border p-5 font-mono text-sm overflow-x-auto">
-              <div><span class="text-gray-500"># connect client to ThunderAgent router (port 9000)</span></div>
-              <div><span class="text-gray-500"># ThunderAgent would forward the requests to vLLM backend (port
+              <div><span class="text-[var(--color-text-muted)]"># connect client to ThunderAgent router (port
+                  9000)</span></div>
+              <div><span class="text-[var(--color-text-muted)]"># ThunderAgent would forward the requests to vLLM
+                  backend (port
                   8000)</span></div>
               <div class="mt-1"><span class="text-cyber-yellow">from</span> openai <span
                   class="text-cyber-yellow">import</span> OpenAI</div>
@@ -839,14 +1089,28 @@
             howto: { text: 'text-cyber-gold', border: 'border-cyber-gold' }
           };
 
+          // Define all possible active colors to remove
+          const possibleActiveClasses = [
+            'text-cyber-yellow', 'border-cyber-yellow',
+            'text-cyber-gold', 'border-cyber-gold'
+          ];
+
           document.querySelectorAll('.ov-tab').forEach(btn => {
-            btn.className = btn.className.replace(/text-cyber-\w+/g, 'text-gray-500')
-              .replace(/border-cyber-\w+/g, 'border-transparent');
+            // Remove any possible active classes
+            btn.classList.remove(...possibleActiveClasses);
+
+            // Add inactive classes
+            if (!btn.classList.contains('text-[var(--color-text-muted)]')) {
+              btn.classList.add('text-[var(--color-text-muted)]');
+            }
+            if (!btn.classList.contains('border-transparent')) {
+              btn.classList.add('border-transparent');
+            }
           });
 
           const activeBtn = document.getElementById('ov-tab-' + tab);
           const c = colors[tab];
-          activeBtn.classList.remove('text-gray-500', 'border-transparent');
+          activeBtn.classList.remove('text-[var(--color-text-muted)]', 'border-transparent');
           activeBtn.classList.add(c.text, c.border);
 
           document.querySelectorAll('.ov-panel').forEach(p => p.classList.add('hidden'));
@@ -869,15 +1133,15 @@
         <!-- Tab buttons -->
         <div class="flex border-b border-cyber-border">
           <button onclick="switchChallengeTab('kvcache')" id="ch-tab-kvcache"
-            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-red-400 border-red-400">
+            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-status-red)] border-[var(--color-status-red)]">
             KV Cache Thrashing
           </button>
           <button onclick="switchChallengeTab('imbalance')" id="ch-tab-imbalance"
-            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-red-300">
+            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-[var(--color-status-red)]">
             Memory Imbalance
           </button>
           <button onclick="switchChallengeTab('unrecycled')" id="ch-tab-unrecycled"
-            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-gray-500 border-transparent hover:text-red-300">
+            class="ch-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-[var(--color-status-red)]">
             Unrecycled Resources
           </button>
         </div>
@@ -892,26 +1156,43 @@
               <img src="KV_thrashing.png" alt="KV Cache Thrashing Illustration" class="max-w-full rounded"
                 loading="lazy" />
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed">
-              Agentic workflows consist of <span class="text-red-400 font-semibold">reasoning</span> phases (which
-              consume GPU resources) and <span class="text-red-400 font-semibold">acting</span> phases (i.e., tool
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+              Agentic workflows consist of <span class="text-[var(--color-status-red)] font-semibold">reasoning</span>
+              phases (which
+              consume GPU resources) and <span class="text-[var(--color-status-red)] font-semibold">acting</span> phases
+              (i.e., tool
               calling, which do not consume GPU). During the acting phase, request-aware serving engines (e.g., vLLM,
-              SGLang) treat the KV cache of acting workflows as evictable idle memory. However, under high-concurrency
-              serving scenarios, nearly all GPU memory is occupied by workflow KV caches (as shown in Step 1). Reasoning
-              workflows then preempt the KV cache originally belonging to acting workflows (Step 2). When those acting
-              workflows later re-enter the reasoning phase, they in turn evict KV caches of other workflows (Steps 3
-              &amp; 4). This cascading eviction forces a large number of workflows to recompute the entire trajectory
-              prefill from scratch, dramatically increasing the <span class="text-red-400 font-semibold">end-to-end
+              SGLang) treat the KV cache of acting workflows as evictable idle memory.
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+              However, under high-concurrency
+              serving scenarios, nearly all GPU memory is occupied by workflow KV caches (<span
+                class="text-[var(--color-status-red)] font-semibold">Step 1</span>). Reasoning
+              workflows then preempt the KV cache originally belonging to acting workflows (<span
+                class="text-[var(--color-status-red)] font-semibold">Step 2</span>). When those acting
+              workflows later re-enter the reasoning phase, they in turn evict KV caches of other workflows (<span
+                class="text-[var(--color-status-red)] font-semibold">Steps 3 &amp; 4</span>).
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mt-6">
+              This cascading eviction forces a large number of workflows to recompute the entire trajectory
+              prefill from scratch, dramatically increasing the <span
+                class="text-[var(--color-status-red)] font-semibold">end-to-end
                 latency</span> of each request.
             </p>
             <div class="mt-6 text-center">
-              <img src="cache_hit_latency.png" alt="Cache Hit Rate & Latency" class="rounded"
+              <img src="cache_hit_latency.png?v=2" alt="Cache Hit Rate & Latency" class="rounded"
                 style="width:60%; height:auto; display:inline-block;" loading="lazy" />
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mt-6">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mt-6">
               We evaluated serving mini-SWE-Agent with GLM4.6 on a single H100 node: as the number of parallel LLM agent
-              workflows increases, the KV cache hit rate drops significantly, and the average end-to-end latency per
-              request rises sharply.
+              <span class="text-[var(--color-status-red)] font-semibold">workflows increases</span>, the <span
+                class="text-[var(--color-status-red)] font-semibold">KV cache hit rate drops</span> significantly, and
+              the average <span class="text-[var(--color-status-red)] font-semibold">end-to-end latency per request
+                rises</span> sharply.
             </p>
           </div>
 
@@ -923,28 +1204,42 @@
               <img src="Routing.png" alt="Cross-Node Memory Imbalance Illustration" class="max-w-full rounded"
                 loading="lazy" />
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
               Unlike request-level serving, multi-node agentic serving cannot simply focus on <span
-                class="text-red-400 font-semibold">load balancing</span>. Since requests within the same workflow share
+                class="text-[var(--color-status-red)] font-semibold">load balancing</span>. Since requests within the
+              same workflow share
               substantial KV cache prefixes, routing them to the same GPU node yields high KV cache hit rates(e.g., vLLM
-              KV Router). However, as shown in the figure above, KV-aware routing can <span
-                class="text-red-400 font-semibold">exacerbate memory imbalance</span> across nodes when memory pressure
+              KV Router).
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+              However, as shown in the figure above, KV-aware routing can <span
+                class="text-[var(--color-status-red)] font-semibold">exacerbate memory imbalance</span> across nodes
+              when memory pressure
               is uneven. Although SGLang Gateway introduces an algorithm that switches to a load-balancing router under
               high memory imbalance, it lacks the adaptability required for multi-node and complex agentic workloads,
-              often demanding <span class="text-red-400 font-semibold">manual coefficient tuning</span>. In short,
+              often demanding <span class="text-[var(--color-status-red)] font-semibold">manual coefficient
+                tuning</span>.
+            </p>
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+              In short,
               existing routers fail to dynamically balance the tradeoff between <span
-                class="text-red-400 font-semibold">KV cache locality</span> and <span
-                class="text-red-400 font-semibold">load balancing</span>, leading to suboptimal throughput in
+                class="text-[var(--color-status-red)] font-semibold">KV cache locality</span> and <span
+                class="text-[var(--color-status-red)] font-semibold">load balancing</span>, leading to suboptimal
+              throughput in
               multi-GPU-node serving.
             </p>
             <div class="mt-6 text-center">
-              <img src="mem_diff.png" alt="Memory imbalance observed when using the vLLM KV Router"
+              <img src="mem_diff.png?v=2" alt="Memory imbalance observed when using the vLLM KV Router"
                 class="rounded" style="width:60%; height:auto; display:inline-block;" loading="lazy" />
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mt-6">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mt-6">
               We evaluated GLM-4.6 + mini-SWE-Agent on 2 H100 nodes with the vLLM KV-aware router: <span
-                class="text-red-400 font-semibold">memory imbalance</span> emerges across nodes, reaching up to <span
-                class="text-red-400 font-semibold">51%</span>.
+                class="text-[var(--color-status-red)] font-semibold">memory imbalance</span> emerges across nodes,
+              reaching up to <span class="text-[var(--color-status-red)] font-semibold">51%</span>.
             </p>
           </div>
 
@@ -952,18 +1247,21 @@
           <div id="ch-panel-unrecycled"
             class="ch-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
             style="border-top:none;">
-            <p class="font-body text-xl text-gray-300 leading-relaxed">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
               Agentic workflows spawn tool environments (Docker containers, sandboxes, API sessions) that persist long
               after the workflow completes. Without lifecycle-aware reclamation, these zombie resources consume disk and
-              memory, leading to <span class="text-red-400 font-semibold">4× unnecessary storage overhead</span>.
+              memory, leading to <span class="text-[var(--color-status-red)] font-semibold">4× unnecessary storage
+                overhead</span>.
             </p>
             <div class="mt-6 text-center">
-              <img src="disk_usage.png" alt="Disk usage growth caused by unrecycled tool resources"
+              <img src="disk_usage.png?v=2" alt="Disk usage growth caused by unrecycled tool resources"
                 class="rounded" style="width:60%; height:auto; display:inline-block;" loading="lazy" />
             </div>
-            <p class="font-body text-xl text-gray-300 leading-relaxed mt-6">
+            <p
+              class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mt-6">
               If tool resources are not reclaimed in time, disk pressure keeps accumulating until nodes hit <span
-                class="text-red-400 font-semibold">storage bottlenecks</span>.
+                class="text-[var(--color-status-red)] font-semibold">storage bottlenecks</span>.
             </p>
           </div>
         </div>
@@ -973,19 +1271,30 @@
         function switchChallengeTab(tab) {
           // Reset all tabs
           document.querySelectorAll('.ch-tab').forEach(btn => {
-            btn.className = btn.className.replace(/text-red-\d+/g, 'text-gray-500')
-              .replace(/border-red-\d+/g, 'border-transparent');
+            // Remove active classes
+            btn.classList.remove('text-[var(--color-status-red)]', 'border-[var(--color-status-red)]');
+            // Add inactive classes (if not already present)
+            if (!btn.classList.contains('text-[var(--color-text-muted)]')) {
+              btn.classList.add('text-[var(--color-text-muted)]');
+            }
+            if (!btn.classList.contains('border-transparent')) {
+              btn.classList.add('border-transparent');
+            }
           });
 
           // Activate selected tab
           const activeBtn = document.getElementById('ch-tab-' + tab);
-          activeBtn.classList.remove('text-gray-500', 'border-transparent');
-          activeBtn.classList.add('text-red-400', 'border-red-400');
+          // Remove inactive classes
+          activeBtn.classList.remove('text-[var(--color-text-muted)]', 'border-transparent');
+          // Add active classes
+          activeBtn.classList.add('text-[var(--color-status-red)]', 'border-[var(--color-status-red)]');
 
           // Show selected panel, hide others
           document.querySelectorAll('.ch-panel').forEach(p => p.classList.add('hidden'));
           document.getElementById('ch-panel-' + tab).classList.remove('hidden');
         }
+      </script>
+      }
       </script>
     </div>
   </section>
@@ -997,534 +1306,791 @@
         <span class="font-mono text-2xl text-cyber-yellow tracking-widest uppercase">// Section 4: Our Method and Design
           Philosophy</span>
         <div class="h-line-yellow w-64 mx-auto mt-6 opacity-50"></div>
-        <p class="font-body text-xl md:text-2xl text-gray-200 tracking-wide mt-8 leading-relaxed max-w-4xl mx-auto">
+        <p
+          class="font-body text-xl md:text-2xl text-[var(--color-text-main)] tracking-wide mt-8 leading-loose tracking-wide max-w-3xl text-justify mx-auto max-w-4xl mx-auto">
           ThunderAgent wraps each agentic workflow into a Stateful <span
-            class="text-cyber-yellow font-bold">Program</span>—the central control unit that drives scheduling, routing,
-          and resource management across the
-          entire system.
+            class="text-cyber-yellow font-bold">Program</span>: the central control unit that drives scheduling,
+          routing, and resource management across the entire system.
         </p>
       </div>
 
       <div id="section-4-1" class="mb-32">
         <div class="flex items-center gap-4 mb-12">
           <div class="h-8 w-1 bg-cyber-yellow"></div>
-          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.1: Program Abstraction</h2>
+          <h2 class="font-heading text-3xl text-[var(--color-text-main)] tracking-wider">Section 4.1: Program
+            Abstraction</h2>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
-
-          <div class="lg:col-span-5 flex flex-col gap-8">
-            <div class="bg-cyber-panel border border-cyber-border p-8 rounded opacity-90 shadow-lg">
-              <div class="flex justify-between items-center mb-6">
-                <h3 class="font-heading text-xl text-gray-200 uppercase">Traditional Engine View</h3>
-                <span class="text-base font-mono text-red-400 border border-red-400 px-3 py-1 rounded">STATELESS</span>
-              </div>
-              <div class="flex gap-2 mb-6 opacity-70">
-                <div
-                  class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-400 rounded">
-                  Req #1</div>
-                <div
-                  class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-400 rounded">
-                  Req #2</div>
-                <div
-                  class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-400 rounded">
-                  Req #3</div>
-                <div
-                  class="w-16 h-16 border border-gray-600 flex items-center justify-center text-xs text-gray-400 rounded">
-                  Req #4</div>
-              </div>
-              <p class="text-xl font-mono text-gray-300 leading-relaxed">
-                > System sees isolated events.<br>
-                > No knowledge of tool dependency or lifecycle.
-              </p>
-            </div>
-
-            <div class="bg-cyber-panel border border-cyber-yellow p-8 rounded box-glow-yellow relative shadow-xl">
-              <div class="flex justify-between items-center mb-6">
-                <h3 class="font-heading text-xl text-white uppercase">ThunderAgent View</h3>
-                <span
-                  class="text-base font-mono text-cyber-yellow border border-cyber-yellow px-3 py-1 rounded bg-yellow-900/20 animate-pulse">STATE
-                  AWARE</span>
-              </div>
-
-              <div class="py-6 border-t border-b border-cyber-border/50 bg-black/20 px-6 rounded space-y-10">
-                <div>
-                  <p class="text-sm font-mono text-cyber-yellow uppercase tracking-widest mb-4">EXECUTION PHASE (&tau;)
-                  </p>
-                  <div class="flex items-center gap-4">
-                    <div class="flex flex-col items-center">
-                      <div
-                        class="w-12 h-12 bg-cyber-yellow/20 border border-cyber-yellow rounded-full flex items-center justify-center text-cyber-yellow font-bold text-lg">
-                        R</div>
-                      <span class="text-[10px] font-mono text-gray-400 mt-2">Reasoning</span>
-                    </div>
-                    <div class="text-cyber-yellow/50">&rarr;</div>
-                    <div class="flex flex-col items-center">
-                      <div
-                        class="w-12 h-12 bg-blue-500/20 border border-blue-400 rounded-full flex items-center justify-center text-blue-400 font-bold text-lg">
-                        A</div>
-                      <span class="text-[10px] font-mono text-gray-400 mt-2">Acting (Tool)</span>
-                    </div>
-                    <div class="text-cyber-yellow/50">&rarr;</div>
-                    <div class="flex flex-col items-center">
-                      <div
-                        class="w-12 h-12 bg-cyber-yellow/20 border border-cyber-yellow rounded-full flex items-center justify-center text-cyber-yellow font-bold text-lg">
-                        R</div>
-                      <span class="text-[10px] font-mono text-gray-400 mt-2">Reasoning</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p class="text-sm font-mono text-cyber-yellow uppercase tracking-widest mb-4">SCHEDULING STATUS (S)
-                  </p>
-                  <div class="flex items-center gap-2 flex-wrap text-sm font-mono uppercase">
-                    <span
-                      class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300">Active</span>
-                    <span class="text-gray-500">&rarr;</span>
-                    <span
-                      class="px-3 py-1.5 rounded border border-yellow-400/60 bg-yellow-500/10 text-yellow-300">Paused</span>
-                    <span class="text-gray-500">&rarr;</span>
-                    <span
-                      class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300">Active</span>
-                    <span class="text-gray-500">&rarr;</span>
-                    <span
-                      class="px-3 py-1.5 rounded border border-red-400/60 bg-red-500/10 text-red-300">Terminated</span>
-                  </div>
-                </div>
-              </div>
-
-              <p class="text-xl font-mono text-gray-300 mt-6 leading-relaxed">
-                > Distinguishes GPU release between tool calls vs. program completion.<br>
-                > Identifies shared tools and reclaims resources no longer in use.
-              </p>
-            </div>
+        <div class="w-full max-w-6xl mx-auto">
+          <!-- Tab buttons -->
+          <div class="flex border-b border-cyber-border mb-8">
+            <button onclick="switchProgTab('why')" id="prog-tab-why"
+              class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-cyber-yellow border-cyber-yellow">
+              Why
+            </button>
+            <button onclick="switchProgTab('what')" id="prog-tab-what"
+              class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-yellow">
+              What
+            </button>
+            <button onclick="switchProgTab('how')" id="prog-tab-how"
+              class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-yellow">
+              How
+            </button>
           </div>
 
-          <div class="lg:col-span-7 flex flex-col pl-0 lg:pl-10">
-            <h3 class="font-heading text-3xl text-white mb-12">
-              Defined as <span class="text-cyber-yellow font-mono">P = &langle; ID, c, &#119983;, &#8466;, &tau;, s
-                &rangle;</span>
-            </h3>
+          <!-- Panels -->
+          <div class="relative min-h-[500px]">
 
-            <div class="space-y-12">
-              <div class="flex gap-6 items-start">
+            <!-- 1. WHY Panel -->
+            <div id="prog-panel-why" class="prog-panel animate-fadeIn">
+              <div
+                class="bg-cyber-panel border border-cyber-border p-8 md:p-12 rounded-lg shadow-lg relative overflow-hidden">
+                <!-- Decorative BG -->
                 <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0">
-                  <span class="font-mono text-cyber-yellow text-2xl font-bold">ID</span>
+                  class="absolute top-0 right-0 w-64 h-64 bg-cyber-yellow/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none">
                 </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Program ID</h4>
-                  <p class="text-xl text-gray-300 font-body">A unique ID to track which program a request belongs to.
-                  </p>
-                </div>
+
+                <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-8 text-center max-w-3xl mx-auto">
+                  Motivation</h3>
+
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto mb-8">
+                  In traditional LLM serving systems, the engine views the world as a stream of <span
+                    class="text-[var(--color-status-red)] font-bold">Stateless Requests</span>.
+                  It doesn't understand that a series of requests might belong to the same Agent working on a single
+                  long-term task.
+                </p>
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto">
+                  This limitation prevents intelligent resource management. On a <span
+                    class="text-[var(--color-status-red)] font-bold">Single Node</span>, the engine cannot optimize the
+                  tradeoff between GPU utilization and KV cache hits (e.g., distinguishing between a finished program
+                  and one waiting for a tool). Across <span class="text-[var(--color-status-red)] font-bold">Multiple
+                    Nodes</span>, it fails to balance workload distribution against context locality. These
+                  inefficiencies ultimately lead to suboptimal system throughput.
+                </p>
               </div>
+            </div>
 
-              <div class="flex gap-6 items-start">
-                <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0">
-                  <span class="font-mono text-blue-400 text-3xl font-bold">&tau;</span>
-                </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Execution Phase</h4>
-                  <p class="text-xl text-gray-300 font-body leading-relaxed">
-                    Distinguishes between <span class="text-cyber-yellow font-bold">Reasoning</span> (performing GPU
-                    inference) and <span class="text-blue-400 font-bold">Acting</span> (releasing GPU resources for
-                    external tool calls). This allows the scheduler to accurately track real-time GPU occupancy for
-                    every program.
-                  </p>
-                </div>
-              </div>
+            <!-- 2. WHAT Panel -->
+            <div id="prog-panel-what" class="prog-panel hidden animate-fadeIn">
+              <div
+                class="bg-[var(--color-bg-base)] border border-cyber-border p-8 md:p-12 rounded-lg shadow-inner flex flex-col items-center">
 
-              <div class="flex gap-6 items-start">
-                <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0">
-                  <span class="font-mono text-green-400 text-2xl font-bold">s</span>
-                </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Scheduling Status</h4>
-                  <p class="text-xl text-gray-300 font-body leading-relaxed">
-                    Tracks whether a program is <span class="text-green-300 font-bold">Active</span> (authorized for GPU
-                    access), <span class="text-yellow-300 font-bold">Paused</span> (suspended from inference), or <span
-                      class="text-red-300 font-bold">Terminated</span>. This management optimizes KV cache lifecycles to
-                    prevent performance thrashing and memory unbalancing.
-                  </p>
-                </div>
-              </div>
+                <div class="flex flex-col gap-12 w-full max-w-3xl">
+                  <!-- Old Way -->
+                  <div class="group">
+                    <div
+                      class="flex justify-between items-end text-sm font-mono text-[var(--color-text-muted)] mb-3 uppercase tracking-widest border-b border-dashed border-[var(--color-text-muted)] pb-1">
+                      <span>Traditional View</span>
+                      <span class="text-[var(--color-status-red)] group-hover:text-red-400 transition-colors">Stateless
+                        Stream</span>
+                    </div>
+                    <div class="flex gap-4">
+                      <div
+                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        Req1</div>
+                      <div
+                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        Req2</div>
+                      <div
+                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        Req3</div>
+                    </div>
+                  </div>
 
-              <div class="flex gap-6 items-start">
-                <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0">
-                  <span class="font-mono text-purple-400 text-3xl font-bold">&#119983;</span>
-                </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Tool Resources</h4>
-                  <p class="text-xl text-gray-300 font-body leading-relaxed">Enables automatic garbage collection when
-                    the program terminates.</p>
-                </div>
-              </div>
+                  <!-- Arrow down -->
+                  <div class="flex justify-center text-[var(--color-text-muted)]">
+                    <svg class="w-10 h-10 animate-bounce opacity-50" fill="none" stroke="currentColor"
+                      viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                    </svg>
+                  </div>
 
-              <div class="flex gap-6 items-start">
-                <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0 border-cyan-500/30">
-                  <span class="font-mono text-cyan-400 text-2xl font-bold">c</span>
-                </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Context Length</h4>
-                  <p class="text-xl text-gray-300 font-body leading-relaxed">Represents program's context length for
-                    memory-pressure-aware scheduling.</p>
-                </div>
-              </div>
+                  <!-- New Way -->
+                  <div class="group">
+                    <div
+                      class="flex justify-between items-end text-sm font-mono text-cyber-yellow mb-3 uppercase tracking-widest border-b border-cyber-yellow pb-1">
+                      <span>ThunderAgent View</span>
+                      <span class="text-cyber-yellow font-bold group-hover:text-yellow-300 transition-colors">Stateful
+                        Programs</span>
+                    </div>
 
-              <div class="flex gap-6 items-start pb-8">
-                <div
-                  class="w-14 h-14 bg-cyber-panel border border-cyber-border flex items-center justify-center shrink-0 border-fuchsia-500/30">
-                  <span class="font-mono text-fuchsia-400 text-3xl font-bold">&#8466;</span>
-                </div>
-                <div>
-                  <h4 class="font-heading text-xl text-white font-bold mb-2">Backend (GPU Node)</h4>
-                  <p class="text-xl text-gray-300 font-body leading-relaxed">Specifies which GPU Node a program is
-                    currently assigned to.</p>
+                    <!-- Program A -->
+                    <div class="flex items-center gap-4 mb-6">
+                      <span class="text-xl font-mono text-cyber-yellow/80 w-12 text-right">P1</span>
+                      <div
+                        class="h-16 w-full border border-cyber-yellow rounded-lg flex items-center relative overflow-hidden bg-cyber-yellow/5 shadow-[0_0_15px_rgba(252,238,9,0.1)]">
+                        <div
+                          class="absolute inset-y-0 left-0 bg-cyber-yellow/20 w-1/3 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
+                          Thinking</div>
+                        <div
+                          class="absolute inset-y-0 left-1/3 bg-[var(--color-status-blue)]/20 w-1/4 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
+                          Tool</div>
+                        <div
+                          class="absolute inset-y-0 left-[58.33%] bg-cyber-yellow/20 w-1/3 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
+                          Thinking</div>
+                      </div>
+                    </div>
+
+                    <!-- Program B -->
+                    <div class="flex items-center gap-4">
+                      <span class="text-xl font-mono text-cyber-yellow/80 w-12 text-right">P2</span>
+                      <div
+                        class="h-16 w-full border border-cyber-yellow rounded-lg flex items-center relative overflow-hidden bg-cyber-yellow/5 opacity-80 shadow-[0_0_15px_rgba(252,238,9,0.05)]">
+                        <div
+                          class="absolute inset-y-0 left-0 bg-[var(--color-status-blue)]/20 w-1/4 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
+                          Tool</div>
+                        <div
+                          class="absolute inset-y-0 left-1/4 bg-cyber-yellow/20 w-1/2 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
+                          Thinking</div>
+                        <div
+                          class="absolute inset-y-0 left-3/4 bg-[var(--color-status-blue)]/20 w-1/4 flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
+                          Tool</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <!-- 3. HOW Panel -->
+            <div id="prog-panel-how" class="prog-panel hidden animate-fadeIn">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+
+                <!-- Left: Interactive Code -->
+                <div
+                  class="bg-[#1e1e1e] border border-cyber-border rounded-lg shadow-xl overflow-hidden font-mono text-sm relative flex flex-col h-full">
+                  <div class="bg-[#2d2d2d] px-4 py-3 flex items-center gap-2 border-b border-[#3c3c3c] shrink-0">
+                    <div class="flex gap-2 mr-4">
+                      <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+                      <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+                      <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+                    </div>
+                    <span class="text-gray-400 text-xs">thunder_agent/program.py</span>
+                  </div>
+
+                  <div class="p-6 overflow-y-auto flex-grow">
+                    <pre class="leading-tight"><span class="text-[#c586c0]">@dataclass</span>
+<span class="text-[#569cd6]">class</span> <span class="text-[#4ec9b0] font-bold">Program</span>:
+    <span class="text-[#ce9178]">"""A single program (task) with its status and state."""</span>
+    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Core Identity ---</span>
+    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('id')" onmouseenter="showProgDetail('id')">    <span class="text-white">program_id</span>: <span class="text-[#4ec9b0]">str</span></div>
+    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Execution Flow ---</span>
+    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('status')" onmouseenter="showProgDetail('status')">    <span class="text-white">status</span>: <span class="text-[#4ec9b0]">ProgramStatus</span> = <span class="text-[#4ec9b0]">ProgramStatus</span>.<span class="text-[#4fc1ff]">ACTING</span></div>
+    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('state')" onmouseenter="showProgDetail('state')">    <span class="text-white">state</span>: <span class="text-[#4ec9b0]">ProgramState</span> = <span class="text-[#4ec9b0]">ProgramState</span>.<span class="text-[#4fc1ff]">ACTIVE</span></div>
+    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Location & Resources ---</span>
+    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('backend')" onmouseenter="showProgDetail('backend')">    <span class="text-white">backend_url</span>: <span class="text-[#4ec9b0]">Optional</span>[<span class="text-[#4ec9b0]">str</span>] = <span class="text-[#569cd6]">None</span></div>
+    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('context')" onmouseenter="showProgDetail('context')">    <span class="text-white">context_len</span>: <span class="text-[#4ec9b0]">int</span> = <span class="text-[#b5cea8]">0</span></div>
+</pre>
+                  </div>
+                  <div
+                    class="px-4 py-2 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-500 italic text-center shrink-0">
+                    Hover or click properties to see details
+                  </div>
+                </div>
+
+                <!-- Right: Detail Panel -->
+                <div
+                  class="bg-cyber-panel border border-cyber-border rounded-lg p-8 flex flex-col justify-center relative overflow-hidden transition-all duration-300 layout-transition"
+                  id="prog-detail-container">
+                  <!-- Background Glow -->
+                  <div
+                    class="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-transparent to-cyber-yellow/5 pointer-events-none">
+                  </div>
+
+                  <div id="prog-detail-content" class="relative z-10 animate-fadeIn">
+                    <!-- Default Content -->
+                    <div class="flex flex-col items-center text-center text-[var(--color-text-muted)] space-y-4">
+                      <svg class="w-16 h-16 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                      </svg>
+                      <p class="text-xl">Select a property on the left to view its details.</p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
 
-      <!-- ===== Section 4.2: Scheduler Overview ===== -->
+      <!-- ===== Section 4.2: Program-Aware Scheduler and Resource Management (Tabbed) ===== -->
       <div id="section-4-2" class="mb-32">
         <div class="flex items-center gap-4 mb-12">
           <div class="h-8 w-1 bg-cyber-gold"></div>
-          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.2: Scheduler Overview</h2>
+          <h2 class="font-heading text-3xl text-[var(--color-text-main)] tracking-wider">Section 4.2: Program-Aware
+            Scheduler and Resource Management</h2>
         </div>
 
-        <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-6">
-            ThunderAgent's scheduling policy targets non-productive overhead by decomposing the total cost of agentic
-            inference into five components: <span class="text-cyber-gold font-semibold">decoding</span>, <span
-              class="text-cyber-gold font-semibold">prefilling</span>, <span
-              class="text-cyber-gold font-semibold">recomputation</span>, <span
-              class="text-cyber-gold font-semibold">unused capacity</span>, and <span
-              class="text-cyber-gold font-semibold">idle caching</span>. Among these, only decoding and prefilling
-            contribute to effective throughput — the remaining three represent wasted system overhead. The scheduler
-            minimizes these overhead costs via two primitive operations:
-          </p>
+        <div class="w-full max-w-5xl mx-auto">
+          <!-- Tab buttons -->
+          <div class="flex border-b border-cyber-border">
+            <button onclick="switchSchedTab('overview')" id="sc-tab-overview"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-cyber-gold border-cyber-gold">
+              Overview
+            </button>
+            <button onclick="switchSchedTab('monitor')" id="sc-tab-monitor"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-gold">
+              Periodic Monitor
+            </button>
+            <button onclick="switchSchedTab('queue')" id="sc-tab-queue"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-gold">
+              Global Waiting Queue
+            </button>
+            <button onclick="switchSchedTab('toolmgmt')" id="sc-tab-toolmgmt"
+              class="sc-tab flex-1 py-4 px-4 font-heading text-base md:text-lg tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-gold">
+              Tool Resource Management
+            </button>
+          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="bg-black/20 border border-red-400/30 p-6 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span
-                  class="px-3 py-1.5 rounded border border-red-400/50 bg-red-500/10 text-red-300 font-mono text-sm uppercase font-bold">Pause</span>
-              </div>
-              <p class="text-lg text-gray-300 font-body leading-relaxed">
-                Removes a program from active execution, unbinds it from its backend, releases its KV cache for
-                preemption, and sets its status to <span class="text-red-300 font-semibold">Paused</span>.
+          <!-- Tab content panels -->
+          <div class="relative mt-0">
+
+            <!-- ===== Overview Panel (formerly 4.2) ===== -->
+            <div id="sc-panel-overview"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left"
+              style="border-top:none;">
+              <p
+                class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+                ThunderAgent's multi-node scheduling algorithm operates at the <span
+                  class="text-[var(--color-status-red)] font-bold">program</span> granularity.
+                A periodic monitor checks each GPU node at fixed intervals and pauses programs on nodes that have
+                accumulated too many active programs,
+                preventing <span class="text-[var(--color-status-red)] font-bold">KV cache thrashing</span>.
               </p>
+              <p
+                class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+                Paused programs are placed into a <span class="text-[var(--color-status-red)] font-bold">global waiting
+                  queue</span> shared across all GPU nodes.
+                When the monitor detects that a node is <span
+                  class="text-[var(--color-status-red)] font-bold">underutilized</span>,
+                queued programs are dispatched to different nodes in a load-balanced manner, achieving
+                <span class="text-[var(--color-status-red)] font-bold">memory balance</span> across the cluster and
+                increasing agentic inference throughput.
+              </p>
+
+              <p
+                class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-10">
+                Upon program completion, the scheduler updates the reference count of the associated tool resources
+                (e.g., containers, images).
+                If the count drops to zero, resources are <span
+                  class="text-[var(--color-status-red)] font-bold">reclaimed immediately</span> by dynamically freeing
+                unused resources and enabling agents to run reliably over extended periods.
+              </p>
+
+              <!-- Full-width image below -->
+              <div
+                class="relative p-3 bg-gradient-to-br from-cyber-gold/10 to-transparent border border-cyber-gold/30 rounded-lg">
+                <img src="TR.png" alt="Scheduler Architecture Overview" class="w-full rounded shadow-2xl"
+                  loading="lazy" />
+              </div>
             </div>
-            <div class="bg-black/20 border border-green-400/30 p-6 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span
-                  class="px-3 py-1.5 rounded border border-green-400/50 bg-green-500/10 text-green-300 font-mono text-sm uppercase font-bold">Restore</span>
-              </div>
-              <p class="text-lg text-gray-300 font-body leading-relaxed">
-                Admits a paused program back into active execution by assigning it to a backend
-                <span class="font-mono text-cyan-400">&Lscr;'</span> with available capacity, setting its status to
-                <span class="text-green-300 font-semibold">Active</span>.
+
+            <!-- ===== Periodic Monitor Panel (formerly 4.3) ===== -->
+            <div id="sc-panel-monitor"
+              class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+              style="border-top:none;">
+              <p
+                class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-8">
+                In agentic workloads, <span class="text-[var(--color-status-red)] font-bold">KV cache thrashing</span>
+                can occur even when
+                no new requests or programs arrive because context lengths grow continuously during decoding, silently
+                exceeds
+                memory beyond of GPU node.
               </p>
+              <p
+                class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-8">
+                To catch this, ThunderAgent employs a
+                <span class="text-[var(--color-status-red)] font-bold">periodic monitor</span> that evaluates the memory
+                usage of each
+                GPU node at fixed intervals <span class="font-mono text-[var(--color-status-red)]">&Delta;t</span>,
+                enabling preemptive detection of memory pressure before it degrades throughput.
+              </p>
+
+              <!-- Thrashing Detection Mechanism -->
+              <div class="bg-[var(--color-bg-deeper)] border border-cyber-border p-8 rounded-lg mb-8">
+                <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold mb-4 text-center">Detection
+                  Overview</h4>
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
+                  The monitor checks each GPU node for two conditions:
+                  <span class="text-[var(--color-status-red)] font-bold">thrashing</span> (memory overloaded) and
+                  <span class="text-[var(--color-status-red)] font-bold">underutilization</span> (memory underused).
+                  Based on the diagnosis, it takes one of two actions:
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                  <div class="flex items-start gap-4">
+                    <div
+                      class="w-12 h-12 bg-amber-500/10 border border-[var(--color-status-yellow)]/40 rounded-full flex items-center justify-center shrink-0">
+                      <span class="font-mono text-[var(--color-status-yellow)] text-lg font-bold">!</span>
+                    </div>
+                    <div>
+                      <p class="text-lg text-[var(--color-text-main)] font-semibold mb-1">Thrashing Detected</p>
+                      <p class="text-lg text-[var(--color-text-muted)] font-body">
+                        <span class="text-[var(--color-status-yellow)] font-bold">Pause</span> programs on the
+                        overloaded node — evict them from GPU and save their state to the global waiting queue.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-4">
+                    <div
+                      class="w-12 h-12 bg-green-500/10 border border-[var(--color-status-green)] rounded-full flex items-center justify-center shrink-0">
+                      <span class="font-mono text-green-400 text-lg font-bold">&check;</span>
+                    </div>
+                    <div>
+                      <p class="text-lg text-[var(--color-text-main)] font-semibold mb-1">Underutilization Detected</p>
+                      <p class="text-lg text-[var(--color-text-muted)] font-body">
+                        <span class="text-[var(--color-status-green)] font-bold">Restore</span> programs from the
+                        waiting queue back to the GPU node, resuming their execution.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Time-Decay & Shortest-First -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-[var(--color-bg-deeper)] border border-cyber-border p-8 rounded-lg">
+                  <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold mb-4 text-center">Time-Decay
+                    for Restoring</h4>
+                  <p
+                    class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
+                    During tool execution, GPU memory occupied by acting programs' KV caches sits idle. To balance the
+                    cost
+                    of caching against recomputation, ThunderAgent applies an <span
+                      class="text-[var(--color-status-red)] font-bold">exponential time-decay function</span>
+                    <span class="font-mono text-[var(--color-status-red)]">f(t)</span> that progressively discounts the
+                    effective memory
+                    weight of acting programs. This encourages the scheduler to pause and evict long-idle contexts when
+                    memory pressure rises, rather than holding them indefinitely.
+                  </p>
+                  <div class="bg-cyber-dark border border-cyber-border p-5 rounded mt-4 text-center overflow-x-auto">
+                    $$\text{C}_{\text{total}} \;<\; \sum_{p \in \mathcal{L},\, \tau=\mathbf{R}} c_p \;+\; \sum_{q \in
+                      \mathcal{L},\, \tau=\mathbf{A}} c_q \times f(t_q)$$ </div>
+                  </div>
+                  <div class="bg-[var(--color-bg-deeper)] border border-cyber-border p-8 rounded-lg">
+                    <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold mb-4 text-center">
+                      Shortest-First Eviction</h4>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
+                      When the scheduler needs to evict programs to free $\Delta C$ tokens of memory, ThunderAgent
+                      greedily
+                      selects programs with the <span class="text-[var(--color-status-red)] font-bold">shortest context
+                        lengths</span>.
+                      Since recomputation cost scales quadratically with token length
+                      ($\text{Cost}_{\text{recompute}} \propto c_i^2$), evicting shorter contexts minimizes the total
+                      recomputation overhead.
+                    </p>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+                      The state indicator $\mathbb{I}$ further ensures that the scheduler prioritizes pausing
+                      <span class="text-[var(--color-status-red)] font-bold">Acting</span> programs (reclaiming cached
+                      memory to reduce
+                      $\text{Cost}_{\text{caching}}$) and prioritizes restoring
+                      <span class="text-[var(--color-status-red)] font-bold">Reasoning</span> programs (maximizing
+                      effective decoding
+                      throughput).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== Global Waiting Queue Panel (formerly 4.4) ===== -->
+              <div id="sc-panel-queue"
+                class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+                style="border-top:none;">
+                <!-- Part 1: Pause / Restore Priority -->
+                <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold mb-6 text-center">Shortest-First
+                  Scheduling Priority</h4>
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+                  The global waiting queue determines <em>which</em> programs to pause or restore using a scoring
+                  function
+                  that combines the program's <span class="text-[var(--color-status-red)] font-bold">execution
+                    phase</span> (reasoning vs. acting)
+                  with its <span class="text-[var(--color-status-red)] font-bold">context length</span>:
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <!-- Pause priority -->
+                  <div class="bg-[var(--color-bg-deeper)] border border-[var(--color-status-yellow)]/30 p-6 rounded-lg">
+                    <div class="flex items-center gap-3 mb-3">
+                      <span
+                        class="px-3 py-1.5 rounded border border-[var(--color-status-yellow)]/50 bg-amber-500/10 text-[var(--color-status-yellow)] font-mono text-sm uppercase font-bold">Pause
+                        Priority</span>
+                    </div>
+                    <div class="bg-cyber-dark border border-cyber-border p-4 rounded text-center overflow-x-auto mb-4">
+                      $$S_{\text{pause}}(P) = \frac{1}{c_P} + \mathbb{I}(\tau = \mathbf{A})$$
+                    </div>
+                    <p
+                      class="text-lg text-[var(--color-text-muted)] font-body leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+                      <span class="text-[var(--color-status-yellow)] font-bold">Acting</span> programs are paused first
+                      (their KV cache is idle during tool execution).
+                      Among them, <span class="text-[var(--color-status-yellow)] font-bold">shorter</span> contexts are
+                      evicted first to minimize quadratic recomputation cost.
+                    </p>
+                  </div>
+                  <!-- Restore priority -->
+                  <div class="bg-[var(--color-bg-deeper)] border border-[var(--color-status-green)] p-6 rounded-lg">
+                    <div class="flex items-center gap-3 mb-3">
+                      <span
+                        class="px-3 py-1.5 rounded border border-[var(--color-status-green)] bg-green-500/10 text-[var(--color-status-green)] font-mono text-sm uppercase font-bold">Restore
+                        Priority</span>
+                    </div>
+                    <div class="bg-cyber-dark border border-cyber-border p-4 rounded text-center overflow-x-auto mb-4">
+                      $$S_{\text{restore}}(P) = \frac{1}{c_P} + \mathbb{I}(\tau = \mathbf{R})$$
+                    </div>
+                    <p
+                      class="text-lg text-[var(--color-text-muted)] font-body leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+                      <span class="text-[var(--color-status-green)] font-bold">Reasoning</span> programs are restored
+                      first (they directly contribute to decoding throughput).
+                      Shorter contexts are restored first to minimize recomputation overhead.
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Part 2: Why load-balanced restore -->
+                <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold mb-6 mt-10 text-center">Why
+                  Load-Balanced Restore?</h4>
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-6">
+                  Existing KV-aware routers greedily pin all requests from the same workflow to the same GPU node for
+                  cache locality.
+                  This causes severe <span class="text-[var(--color-status-red)] font-bold">memory imbalance</span> —
+                  some nodes are overloaded while others sit idle.
+                </p>
+                <p
+                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-8">
+                  The key insight is: once a program is paused, its KV cache has already been <span
+                    class="text-[var(--color-status-red)] font-bold">evicted</span>.
+                  Recomputation cost is therefore <span
+                    class="text-[var(--color-status-red)] font-bold">node-agnostic</span> — there is no locality benefit
+                  in sending it back to the original node.
+                  This allows the global queue to dispatch restored programs to <span
+                    class="text-[var(--color-status-red)] font-bold">any node with available capacity</span>
+                  in a load-balanced manner, achieving cross-node memory balance without sacrificing KV cache locality
+                  for active programs.
+                </p>
+              </div>
+
+              <!-- ===== Tool Resource Management Panel (formerly 4.5) ===== -->
+              <div id="sc-panel-toolmgmt"
+                class="sc-panel bg-cyber-panel border border-t-0 border-cyber-border p-8 md:p-10 text-left hidden"
+                style="border-top:none;">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  <!-- Hook-based GC -->
+                  <div class="bg-[var(--color-bg-deeper)] border border-cyber-border p-8 rounded-lg">
+                    <div class="flex items-center justify-center gap-3 mb-6">
+                      <div
+                        class="w-12 h-12 bg-red-500/10 border border-[var(--color-status-red)]/40 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-[var(--color-status-red)]" fill="none" stroke="currentColor"
+                          stroke-width="1.5" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </div>
+                      <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold">Hook-Based Garbage
+                        Collection</h4>
+                    </div>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
+                      ThunderAgent implements lifecycle hooks that strictly couple tool resource persistence with the
+                      program's scheduling status <span class="font-mono text-[var(--color-status-red)]">s</span>. When
+                      a program is <span class="text-[var(--color-status-red)] font-bold">Terminated</span>, the
+                      collector triggers an immediate teardown
+                      sequence that systematically reclaiming sandboxes, Docker containers, network sockets, and compute
+                      slots.
+                    </p>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+                      This lifecycle-aware policy maintains <span
+                        class="text-[var(--color-status-red)] font-bold">near-constant disk
+                        memory consumption</span> over time, preventing the unbounded resource accumulation observed in
+                      systems without program-level garbage collection.
+                    </p>
+                  </div>
+
+                  <!-- Async Env Preparation -->
+                  <div class="bg-[var(--color-bg-deeper)] border border-cyber-border p-8 rounded-lg">
+                    <div class="flex items-center justify-center gap-3 mb-6">
+                      <div
+                        class="w-12 h-12 bg-cyber-gold/10 border border-cyber-gold/40 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-cyber-gold" fill="none" stroke="currentColor" stroke-width="1.5"
+                          viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                        </svg>
+                      </div>
+                      <h4 class="font-heading text-xl text-[var(--color-text-main)] font-bold">Asynchronous Environment
+                        Preparation</h4>
+                    </div>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
+                      Tool execution environments (e.g., Docker containers, dependency installation) are costly to
+                      initialize.
+                      ThunderAgent monitors the global waiting queue; when a high-priority program approaches the
+                      restore
+                      threshold, the system <span class="text-[var(--color-status-yellow)] font-bold">asynchronously
+                        pre-builds</span>
+                      its execution environment before GPU memory is allocated.
+                    </p>
+                    <p
+                      class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto">
+                      This technique effectively <span class="text-[var(--color-status-yellow)] font-bold">hides the
+                        initialization
+                        overhead</span>, significantly reducing end-to-end latency for tool-call heavy workloads like
+                      coding agents and science agents.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
 
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-10">
-            The scheduler coordinates three mechanisms: a <span class="text-cyber-gold font-semibold">periodic
-              monitor</span> that detects memory pressure at fixed intervals, a <span
-              class="text-cyber-gold font-semibold">global waiting queue</span> that balances load across GPU nodes,
-            and <span class="text-cyber-gold font-semibold">tool resource management</span> that reclaims
-            environments upon program termination.
-          </p>
-
-          <!-- Full-width image below -->
-          <div
-            class="relative p-3 bg-gradient-to-br from-cyber-gold/10 to-transparent border border-cyber-gold/30 rounded-lg">
-            <img src="TR.png" alt="Scheduler Architecture Overview" class="w-full rounded shadow-2xl"
-              loading="lazy" />
-          </div>
-          <!-- <p class="text-sm text-gray-500 font-mono mt-3 text-center">Figure: Scheduler architecture showing
-            Restore/Pause transitions, periodic monitoring, and the global waiting queue.</p> -->
+          <script>
+            function switchSchedTab(tab) {
+              document.querySelectorAll('.sc-tab').forEach(btn => {
+                btn.className = btn.className.replace(/text-cyber-\w+/g, 'text-[var(--color-text-muted)]')
+                  .replace(/border-cyber-\w+/g, 'border-transparent');
+              });
+              const activeBtn = document.getElementById('sc-tab-' + tab);
+              activeBtn.classList.remove('text-[var(--color-text-muted)]', 'border-transparent');
+              activeBtn.classList.add('text-cyber-gold', 'border-cyber-gold');
+              document.querySelectorAll('.sc-panel').forEach(p => p.classList.add('hidden'));
+              document.getElementById('sc-panel-' + tab).classList.remove('hidden');
+            }
+          </script>
         </div>
+
       </div>
-
-      <!-- ===== Section 4.3: Periodic Monitor ===== -->
-      <div id="section-4-3" class="mb-32">
-        <div class="flex items-center gap-4 mb-12">
-          <div class="h-8 w-1 bg-cyber-gold"></div>
-          <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.3: Periodic Monitor</h2>
-        </div>
-
-        <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-          <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
-            Unlike baseline schedulers that only check capacity upon a workflow's arrival, ThunderAgent implements a
-            <span class="text-cyber-gold font-semibold">periodic monitor</span> that evaluates the memory usage of each
-            data-parallel backend at fixed intervals <span class="font-mono text-cyber-yellow">&Delta;t</span>. This
-            enables preemptive detection of memory pressure caused by growing context lengths during decoding — even
-            without new arrivals.
-          </p>
-
-          <!-- Thrashing Detection Mechanism -->
-          <div class="bg-black/20 border border-cyber-border p-8 rounded-lg mb-8">
-            <h4 class="font-heading text-xl text-white font-bold mb-4">Thrashing Detection &amp; Hysteresis Window</h4>
-            <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-              Thrashing is detected when the total context length of all programs on a backend exceeds its KV cache
-              capacity. ThunderAgent uses a <span class="text-cyber-gold font-semibold">dual-watermark</span> mechanism
-              to stabilize scheduling decisions:
-            </p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <div class="flex items-start gap-4">
-                <div
-                  class="w-12 h-12 bg-red-500/10 border border-red-400/40 rounded-full flex items-center justify-center shrink-0">
-                  <span class="font-mono text-red-400 text-lg font-bold">&lambda;<sub>max</sub></span>
-                </div>
-                <div>
-                  <p class="text-lg text-gray-200 font-semibold mb-1">High Watermark</p>
-                  <p class="text-lg text-gray-400 font-body">When memory exceeds this threshold, ThunderAgent invokes
-                    <span class="text-yellow-300 font-semibold">Pause</span> to suspend active programs until usage
-                    drops below the limit.
-                  </p>
-                </div>
-              </div>
-              <div class="flex items-start gap-4">
-                <div
-                  class="w-12 h-12 bg-green-500/10 border border-green-400/40 rounded-full flex items-center justify-center shrink-0">
-                  <span class="font-mono text-green-400 text-lg font-bold">&lambda;<sub>min</sub></span>
-                </div>
-                <div>
-                  <p class="text-lg text-gray-200 font-semibold mb-1">Low Watermark</p>
-                  <p class="text-lg text-gray-400 font-body">When memory drops below this threshold, ThunderAgent
-                    invokes <span class="text-green-300 font-semibold">Restore</span> to admit paused programs back into
-                    execution.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Time-Decay & Shortest-First -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-              <h4 class="font-heading text-xl text-white font-bold mb-4">Time-Decay for Acting Programs</h4>
-              <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                During tool execution, GPU memory occupied by acting programs' KV caches sits idle. To balance the cost
-                of caching against recomputation, ThunderAgent applies an <span
-                  class="text-cyber-gold font-semibold">exponential time-decay function</span>
-                <span class="font-mono text-cyber-yellow">f(t)</span> that progressively discounts the effective memory
-                weight of acting programs. This encourages the scheduler to pause and evict long-idle contexts when
-                memory pressure rises, rather than holding them indefinitely.
-              </p>
-              <div class="bg-cyber-dark border border-cyber-border p-5 rounded mt-4 text-center overflow-x-auto"
-                style="color: #e0e0e8;">
-                $$\text{C}_{\text{total}} \;<\; \sum_{p \in \mathcal{L},\, \tau=\mathbf{R}} c_p \;+\; \sum_{q \in
-                  \mathcal{L},\, \tau=\mathbf{A}} c_q \times f(t_q)$$ </div>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-                <h4 class="font-heading text-xl text-white font-bold mb-4">Shortest-First Eviction</h4>
-                <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                  When the scheduler needs to evict programs to free $\Delta C$ tokens of memory, ThunderAgent greedily
-                  selects programs with the <span class="text-cyber-gold font-semibold">shortest context lengths</span>.
-                  Since recomputation cost scales quadratically with token length
-                  ($\text{Cost}_{\text{recompute}} \propto c_i^2$), evicting shorter contexts minimizes the total
-                  recomputation overhead.
-                </p>
-                <p class="font-body text-lg text-gray-300 leading-relaxed">
-                  The state indicator $\mathbb{I}$ further ensures that the scheduler prioritizes pausing
-                  <span class="text-blue-400 font-semibold">Acting</span> programs (reclaiming cached memory to reduce
-                  $\text{Cost}_{\text{caching}}$) and prioritizes restoring
-                  <span class="text-cyber-yellow font-semibold">Reasoning</span> programs (maximizing effective decoding
-                  throughput).
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ===== Section 4.4: Global Waiting Queue ===== -->
-        <div id="section-4-4" class="mb-32">
-          <div class="flex items-center gap-4 mb-12">
-            <div class="h-8 w-1 bg-cyber-gold"></div>
-            <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.4: Global Waiting Queue</h2>
-          </div>
-
-          <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-            <p class="font-body text-xl text-gray-300 leading-relaxed mb-8">
-              Memory imbalance across GPU nodes introduces significant wasted capacity. Existing KV-aware routers
-              greedily
-              pin workflows to the same node for cache locality, but this can overload some nodes while leaving others
-              idle. To address this, ThunderAgent unifies the waiting queues of all backend replicas into a single <span
-                class="text-cyber-gold font-semibold">global program-aware waiting queue</span>.
-            </p>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-purple-500/10 border border-purple-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                    </svg>
-                  </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Program Transferability</h4>
-                </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed">
-                  Paused programs are assumed to have their KV cache evicted, making recomputation cost node-agnostic.
-                  This allows the system to direct paused programs to <span class="text-cyber-gold font-semibold">any
-                    node</span> with available capacity.
-                </p>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-green-500/10 border border-green-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-                    </svg>
-                  </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Cross-Node Balancing</h4>
-                </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed">
-                  The global queue enforces memory balancing across nodes via load-balanced restore routing, while
-                  preserving locality for requests within <span class="text-cyber-gold font-semibold">active</span>
-                  programs during execution.
-                </p>
-              </div>
-              <div class="bg-black/20 border border-cyber-border p-6 rounded-lg">
-                <div class="flex items-center gap-3 mb-4">
-                  <div
-                    class="w-10 h-10 bg-cyan-500/10 border border-cyan-400/40 rounded flex items-center justify-center">
-                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                      viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z" />
-                    </svg>
-                  </div>
-                  <h4 class="font-heading text-lg text-white font-bold">Bounded Waste</h4>
-                </div>
-                <p class="text-lg text-gray-400 font-body leading-relaxed mb-4">
-                  The global queue bounds unused cost for every node per monitoring period, where
-                  $c_{\min}$ is the minimum token length among paused programs:
-                </p>
-                <div class="bg-cyber-dark border border-cyber-border p-4 rounded text-center overflow-x-auto"
-                  style="color: #e0e0e8;">
-                  $$\text{Cost}_{\text{unused}} \;<\; c_{\min} \cdot \Delta t$$ </div>
-                </div>
-              </div>
-
-              <p class="font-body text-xl text-gray-300 leading-relaxed">
-                By decoupling locality from restore routing, the global queue navigates the fundamental tradeoff between
-                <span class="text-cyber-gold font-semibold">KV cache locality</span> and <span
-                  class="text-cyber-gold font-semibold">load balancing</span> — preserving locality for active execution
-                while enabling cross-node transfers for paused programs.
-              </p>
-            </div>
-          </div>
-
-          <!-- ===== Section 4.5: Tool Resource Management ===== -->
-          <div id="section-4-5">
-            <div class="flex items-center gap-4 mb-12">
-              <div class="h-8 w-1 bg-cyber-gold"></div>
-              <h2 class="font-heading text-3xl text-white tracking-wider">Section 4.5: Tool Resource Management</h2>
-            </div>
-
-            <div class="w-full border border-cyber-border bg-cyber-panel p-10 rounded-lg shadow-xl">
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                <!-- Hook-based GC -->
-                <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-                  <div class="flex items-center gap-3 mb-6">
-                    <div
-                      class="w-12 h-12 bg-red-500/10 border border-red-400/40 rounded-lg flex items-center justify-center">
-                      <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" stroke-width="1.5"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                    </div>
-                    <h4 class="font-heading text-xl text-white font-bold">Hook-Based Garbage Collection</h4>
-                  </div>
-                  <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                    ThunderAgent implements lifecycle hooks that strictly couple tool resource persistence with the
-                    program's
-                    scheduling status <span class="font-mono text-green-400">s</span>. When a program is <span
-                      class="text-red-300 font-semibold">Terminated</span>, the collector triggers an immediate teardown
-                    sequence — systematically reclaiming sandboxes, Docker containers, network sockets, and compute
-                    slots.
-                  </p>
-                  <p class="font-body text-lg text-gray-300 leading-relaxed">
-                    This lifecycle-aware policy maintains <span class="text-cyber-gold font-semibold">near-constant disk
-                      memory consumption</span> over time, preventing the unbounded resource accumulation observed in
-                    systems without program-level garbage collection.
-                  </p>
-                </div>
-
-                <!-- Async Env Preparation -->
-                <div class="bg-black/20 border border-cyber-border p-8 rounded-lg">
-                  <div class="flex items-center gap-3 mb-6">
-                    <div
-                      class="w-12 h-12 bg-cyber-gold/10 border border-cyber-gold/40 rounded-lg flex items-center justify-center">
-                      <svg class="w-6 h-6 text-cyber-gold" fill="none" stroke="currentColor" stroke-width="1.5"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                          d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                      </svg>
-                    </div>
-                    <h4 class="font-heading text-xl text-white font-bold">Asynchronous Environment Preparation</h4>
-                  </div>
-                  <p class="font-body text-lg text-gray-300 leading-relaxed mb-4">
-                    Tool execution environments (e.g., Docker containers, dependency installation) are costly to
-                    initialize.
-                    ThunderAgent monitors the global waiting queue; when a high-priority program approaches the restore
-                    threshold, the system <span class="text-cyber-gold font-semibold">asynchronously pre-builds</span>
-                    its
-                    execution environment before GPU memory is allocated.
-                  </p>
-                  <p class="font-body text-lg text-gray-300 leading-relaxed">
-                    This technique effectively <span class="text-cyber-gold font-semibold">hides the initialization
-                      overhead</span>, significantly reducing end-to-end latency for tool-call heavy workloads like
-                    coding
-                    agents and science agents.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
   </section>
 
+  <!-- ==================== RIGHT SIDEBAR TOC ==================== -->
+  <nav class="toc-sidebar" id="toc-sidebar">
+    <a href="#hero" class="toc-item" data-section="hero">
+      <span class="toc-dot"></span>Fast, Simple, and Robust
+    </a>
+    <a href="#abstract" class="toc-item" data-section="abstract">
+      <span class="toc-dot"></span>Overview and Manual
+    </a>
+    <a href="#challenges" class="toc-item" data-section="challenges">
+      <span class="toc-dot"></span>Agentic Inference Challenges
+    </a>
+    <a href="#section-4" class="toc-item" data-section="section-4">
+      <span class="toc-dot"></span>Method and Design
+    </a>
+    <a href="#section-4-1" class="toc-item toc-sub" data-section="section-4-1">
+      <span class="toc-dot"></span>Program Abstraction
+    </a>
+    <a href="#section-4-2" class="toc-item toc-sub" data-section="section-4-2">
+      <span class="toc-dot"></span>Scheduler and Resource Management
+    </a>
+  </nav>
+
+  <script>
+    (function () {
+      const tocItems = document.querySelectorAll('.toc-item[data-section]');
+      const sections = [];
+      tocItems.forEach(item => {
+        const id = item.getAttribute('data-section');
+        const el = document.getElementById(id);
+        if (el) sections.push({ id, el, link: item });
+      });
+
+      function updateActive() {
+        // Calculate trigger point: 30% down the viewport
+        const triggerPoint = window.scrollY + (window.innerHeight * 0.3);
+
+        let current = sections[0];
+        for (const s of sections) {
+          // Use getBoundingClientRect to get absolute position relative to viewport, 
+          // then add scrollY to get position relative to document top.
+          // This fixes issues with nested sections (like section-4-1) having small offsetTop relative to parent.
+          const rect = s.el.getBoundingClientRect();
+          const absoluteTop = rect.top + window.scrollY;
+
+          if (absoluteTop <= triggerPoint) {
+            current = s;
+          }
+        }
+
+        tocItems.forEach(item => item.classList.remove('active'));
+        if (current) current.link.classList.add('active');
+      }
+
+      window.addEventListener('scroll', updateActive, { passive: true });
+      updateActive();
+    })();
+  </script>
+
   <!-- ==================== FOOTER ==================== -->
-  <footer class="border-t border-cyber-border px-6 py-10" style="background: rgba(18,18,31,0.8);">
+  <footer class="border-t border-cyber-border px-6 py-10" style="background: var(--color-bg-panel);">
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <img
           src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/thunderagent-RpTQBiJ9rQntjx2mxaQBtFY6yRnEIO.png"
           alt="ThunderAgent Logo" class="w-8 h-8 object-contain" />
-        <span class="font-mono text-xs text-gray-500 tracking-wider"><span class="text-cyber-yellow">THUNDER</span><span
-            class="text-gray-400">AGENT</span> // Program-Aware Agentic Inference</span>
+        <span class="font-mono text-xs text-[var(--color-text-muted)] tracking-wider"><span
+            class="text-cyber-yellow">THUNDER</span><span class="text-[var(--color-text-muted)]">AGENT</span> //
+          Program-Aware Agentic Inference</span>
       </div>
       <div class="flex items-center gap-6">
         <a href="https://github.com/HaoKang-Timmy/ThunderAgent" target="_blank" rel="noopener noreferrer"
-          class="font-mono text-xs text-gray-500 hover:text-cyber-yellow transition-colors tracking-wider">
+          class="font-mono text-xs text-[var(--color-text-muted)] hover:text-cyber-yellow transition-colors tracking-wider">
           GITHUB
         </a>
         <a href="https://github.com/HaoKang-Timmy/ThunderAgent/tree/main/wiki" target="_blank" rel="noopener noreferrer"
-          class="font-mono text-xs text-gray-500 hover:text-cyber-yellow transition-colors tracking-wider">
+          class="font-mono text-xs text-[var(--color-text-muted)] hover:text-cyber-yellow transition-colors tracking-wider">
           WIKI
         </a>
       </div>
     </div>
   </footer>
 
+  <script>
+    // Theme Toggle Logic
+    const toggleBtn = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+    const htmlElement = document.documentElement;
+
+    // Check Local Storage
+    const savedTheme = localStorage.getItem('theme');
+    const systemTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+
+    // Apply Theme
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        htmlElement.setAttribute('data-theme', 'light');
+        sunIcon.classList.add('hidden');
+        moonIcon.classList.remove('hidden');
+      } else {
+        htmlElement.removeAttribute('data-theme');
+        sunIcon.classList.remove('hidden');
+        moonIcon.classList.add('hidden');
+      }
+    }
+
+    // Font Logic
+    const root = document.documentElement;
+    const fonts = {
+      cyber: {
+        heading: "'Orbitron', sans-serif",
+        body: "'Rajdhani', sans-serif",
+        mono: "'Share Tech Mono', monospace"
+      },
+      clean: {
+        heading: "'Inter', sans-serif",
+        body: "'Inter', sans-serif",
+        mono: "'Roboto Mono', monospace"
+      },
+      mono: {
+        heading: "'Roboto Mono', monospace",
+        body: "'Roboto Mono', monospace",
+        mono: "'Roboto Mono', monospace"
+      }
+    };
+
+    function changeFont(style) {
+      const fontConfig = fonts[style];
+      if (!fontConfig) return;
+
+      // Only update body font, keeping Heading (Orbitron) and Mono (Share Tech Mono) fixed.
+      root.style.setProperty('--font-body', fontConfig.body);
+
+      localStorage.setItem('font-style', style);
+    }
+
+    // Initialize Font
+    const savedFont = localStorage.getItem('font-style');
+    if (savedFont && fonts[savedFont]) {
+      changeFont(savedFont);
+    }
+
+    // Event Listener
+    toggleBtn.addEventListener('click', () => {
+      const currentTheme = htmlElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+      applyTheme(newTheme);
+      localStorage.setItem('theme', newTheme);
+    });
+
+    /* === Section 4.1 Logic === */
+    function switchProgTab(tabName) {
+      // 1. Hide all panels
+      document.querySelectorAll('.prog-panel').forEach(el => el.classList.add('hidden'));
+
+      // 2. Show target panel
+      document.getElementById(`prog-panel-${tabName}`).classList.remove('hidden');
+
+      // 3. Update Tab Styles
+      document.querySelectorAll('.prog-tab').forEach(btn => {
+        // Reset to inactive
+        btn.classList.remove('text-cyber-yellow', 'border-cyber-yellow');
+        btn.classList.add('text-[var(--color-text-muted)]', 'border-transparent');
+      });
+
+      // Set active tab
+      const activeBtn = document.getElementById(`prog-tab-${tabName}`);
+      activeBtn.classList.remove('text-[var(--color-text-muted)]', 'border-transparent');
+      activeBtn.classList.add('text-cyber-yellow', 'border-cyber-yellow');
+    }
+
+    const progDetails = {
+      'id': {
+        title: 'Program Identifier (ID)',
+        desc: 'Unique ID tracking which requests belong to the same program. This allows the system to maintain state across multiple turns.',
+        color: 'text-cyber-yellow'
+      },
+      'status': {
+        title: 'Execution Phase (Status)',
+        desc: '<b>Reasoning</b> (consuming GPU resources) vs <b>Acting</b> (consuming CPU tool resources).',
+        color: 'text-[#4fc1ff]'
+      },
+      'state': {
+        title: 'Lifecycle State',
+        desc: 'Global lifecycle status: <b>Active</b> (running), <b>Paused</b> (in global waiting queue), or <b>Terminated</b> (finished).',
+        color: 'text-[#4fc1ff]'
+      },
+      'backend': {
+        title: 'Backend Location',
+        desc: 'Pointer to the physical GPU node hosting this program.',
+        color: 'text-fuchsia-400'
+      },
+      'context': {
+        title: 'Context Metrics',
+        desc: 'Used by the scheduler to prevent KV thrashing and balance memory load across nodes.',
+        color: 'text-[#b5cea8]'
+      }
+    };
+
+    function showProgDetail(key) {
+      const data = progDetails[key];
+      if (!data) return;
+
+      const container = document.getElementById('prog-detail-content');
+
+      // Simple fade effect
+      container.style.opacity = '0';
+
+      setTimeout(() => {
+        container.innerHTML = `
+          <div class="flex flex-col items-start gap-4">
+             <h4 class="font-mono text-3xl font-bold ${data.color} mb-2 border-b border-gray-700 pb-2 w-full">${data.title}</h4>
+             <p class="font-body text-xl text-[var(--color-text-main)] leading-relaxed">${data.desc}</p>
+          </div>
+        `;
+        container.style.opacity = '1';
+      }, 150);
+    }
+  </script>
 </body>
 
 </html>
