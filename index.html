@@ -509,11 +509,18 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* === INLINE MATH SYMBOLS === */
+    .math-sym {
+      font-family: 'Times New Roman', Georgia, 'CMU Serif', serif;
+      font-style: italic;
+      letter-spacing: 0.02em;
+    }
+
     /* === RIGHT SIDEBAR TOC === */
     .toc-sidebar {
       position: fixed;
       top: 50%;
-      right: 16px;
+      right: 20px;
       transform: translateY(-50%);
       z-index: 100;
       max-height: 70vh;
@@ -528,14 +535,14 @@
     .toc-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
+      gap: 14px;
+      padding: 12px 18px;
       font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      color: #606080;
+      font-size: 18px;
+      color: #9090b0;
       text-decoration: none;
       transition: all 0.3s ease;
-      border-right: 2px solid transparent;
+      border-right: 3px solid transparent;
       white-space: nowrap;
       cursor: pointer;
     }
@@ -549,13 +556,14 @@
     .toc-item.active {
       color: var(--color-primary);
       border-right-color: var(--color-primary);
+      border-right-width: 3px;
     }
 
     .toc-item .toc-dot {
-      width: 5px;
-      height: 5px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
-      background: #404060;
+      background: #606080;
       flex-shrink: 0;
       transition: all 0.3s ease;
     }
@@ -567,19 +575,19 @@
 
     .toc-item.active .toc-dot {
       background: var(--color-primary);
-      box-shadow: 0 0 8px var(--color-primary);
-      width: 7px;
-      height: 7px;
+      box-shadow: 0 0 12px var(--color-primary);
+      width: 12px;
+      height: 12px;
     }
 
     .toc-sub {
-      padding-left: 24px;
-      font-size: 10px;
+      padding-left: 36px;
+      font-size: 16px;
     }
 
     .toc-sub .toc-dot {
-      width: 4px;
-      height: 4px;
+      width: 8px;
+      height: 8px;
     }
 
     @media (max-width: 1280px) {
@@ -1324,84 +1332,186 @@
         <div class="w-full max-w-6xl mx-auto">
           <!-- Tab buttons -->
           <div class="flex border-b border-cyber-border mb-8">
-            <button onclick="switchProgTab('why')" id="prog-tab-why"
+            <button onclick="switchProgTab('definition')" id="prog-tab-definition"
               class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-cyber-yellow border-cyber-yellow">
-              Why
+              What is a Program
             </button>
-            <button onclick="switchProgTab('what')" id="prog-tab-what"
+            <button onclick="switchProgTab('contrast')" id="prog-tab-contrast"
               class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-yellow">
-              What
-            </button>
-            <button onclick="switchProgTab('how')" id="prog-tab-how"
-              class="prog-tab flex-1 py-4 px-4 font-heading text-lg md:text-xl tracking-wider font-bold transition-all duration-300 border-b-2 text-[var(--color-text-muted)] border-transparent hover:text-cyber-yellow">
-              How
+              Program-Aware vs Request-Aware
             </button>
           </div>
 
           <!-- Panels -->
           <div class="relative min-h-[500px]">
 
-            <!-- 1. WHY Panel -->
-            <div id="prog-panel-why" class="prog-panel animate-fadeIn">
+            <!-- 1. DEFINITION Panel: Six fields grid -->
+            <div id="prog-panel-definition" class="prog-panel animate-fadeIn">
               <div
                 class="bg-cyber-panel border border-cyber-border p-8 md:p-12 rounded-lg shadow-lg relative overflow-hidden">
-                <!-- Decorative BG -->
                 <div
                   class="absolute top-0 right-0 w-64 h-64 bg-cyber-yellow/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none">
                 </div>
 
-                <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-8 text-center max-w-3xl mx-auto">
-                  Motivation</h3>
+                <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-10 text-center max-w-3xl mx-auto">
+                  Six fields that turn stateless requests into schedulable programs</h3>
 
-                <p
-                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto mb-8">
-                  In traditional LLM serving systems, the engine views the world as a stream of <span
-                    class="text-[var(--color-status-red)] font-bold">Stateless Requests</span>.
-                  It doesn't understand that a series of requests might belong to the same Agent working on a single
-                  long-term task.
-                </p>
-                <p
-                  class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide text-justify max-w-3xl mx-auto">
-                  This limitation prevents intelligent resource management. On a <span
-                    class="text-[var(--color-status-red)] font-bold">Single Node</span>, the engine cannot optimize the
-                  tradeoff between GPU utilization and KV cache hits (e.g., distinguishing between a finished program
-                  and one waiting for a tool). Across <span class="text-[var(--color-status-red)] font-bold">Multiple
-                    Nodes</span>, it fails to balance workload distribution against context locality. These
-                  inefficiencies ultimately lead to suboptimal system throughput.
-                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+
+                  <!-- ID: Program Identity -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-xl text-[#f59e0b] font-bold">ID</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Program
+                        Identity</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Links all multi-turn requests from the same agent task into one unit.
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> The glue that makes program-level
+                      scheduling possible
+                    </div>
+                  </div>
+
+                  <!-- c: Context Length -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#4ade80]/10 border border-[#4ade80]/30"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-2xl text-[#4ade80]">c</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Context
+                        Length</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Tracks the KV cache footprint of each program in real time.
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> Evict lowest-cost programs under
+                      memory pressure
+                    </div>
+                  </div>
+
+                  <!-- T: Tool Environments -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/30"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-2xl text-fuchsia-400">T</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Tool
+                        Environments</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Set of tool resources (containers, sandboxes) bound to this program.
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> Auto-reclaim resources when program
+                      terminates
+                    </div>
+                  </div>
+
+                  <!-- L: Backend Location -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#fbbf24]/15 border border-[#fbbf24]/40"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-2xl text-[#fbbf24]">L</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Backend
+                        Location</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Which GPU node currently hosts this program's KV cache.
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> Route requests to same node for
+                      context locality
+                    </div>
+                  </div>
+
+                  <!-- tau: Execution Phase -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#4fc1ff]/10 border border-[#4fc1ff]/30"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-2xl text-[#4fc1ff]">&tau;</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Execution
+                        Phase</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Distinguishes <span class="text-cyber-yellow font-semibold">Reasoning</span> (GPU-bound) from
+                      <span class="text-[#4fc1ff] font-semibold">Acting</span> (tool-bound, GPU idle).
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> Scheduler knows <em>when</em> to
+                      reclaim GPU from idle programs
+                    </div>
+                  </div>
+
+                  <!-- s: Scheduling State -->
+                  <div
+                    class="bg-[var(--color-bg-deeper)] border border-cyber-border rounded-lg p-6 hover:border-cyber-yellow/50 transition-colors group">
+                    <div class="flex items-center gap-3 mb-4">
+                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#fb923c]/10 border border-[#fb923c]/30"><span style="font-family: 'Times New Roman', Georgia, serif; font-style: italic;" class="text-2xl text-[#fb923c]">s</span></span>
+                      <span class="font-heading text-lg text-[var(--color-text-main)] tracking-wide">Scheduling
+                        State</span>
+                    </div>
+                    <p class="font-body text-base text-[var(--color-text-muted)] leading-relaxed mb-3">
+                      Active, Paused, or Terminated — the global lifecycle of the program.
+                    </p>
+                    <div
+                      class="bg-[var(--color-bg-base)] rounded px-3 py-2 text-sm font-mono text-[var(--color-text-muted)]">
+                      <span class="text-[var(--color-status-green)]">&rarr;</span> Pause &amp; resume programs across
+                      nodes for load balancing
+                    </div>
+                  </div>
+
+                </div>
               </div>
             </div>
 
-            <!-- 2. WHAT Panel -->
-            <div id="prog-panel-what" class="prog-panel hidden animate-fadeIn">
+            <!-- 3. CONTRAST Panel: Program-Aware vs Request-Aware -->
+            <div id="prog-panel-contrast" class="prog-panel hidden animate-fadeIn">
               <div
                 class="bg-[var(--color-bg-base)] border border-cyber-border p-8 md:p-12 rounded-lg shadow-inner flex flex-col items-center">
+
+                <h3 class="font-heading text-2xl text-[var(--color-text-main)] mb-4 text-center max-w-3xl mx-auto">
+                  From Request-Aware to Program-Aware</h3>
+                <p
+                  class="font-body text-lg text-[var(--color-text-main)] opacity-90 leading-relaxed text-center max-w-2xl mx-auto mb-10">
+                  With program abstraction, the serving system sees <span class="text-cyber-yellow font-bold">stateful
+                    programs</span> instead of isolated requests, unlocking scheduling decisions that were
+                  previously impossible.
+                </p>
 
                 <div class="flex flex-col gap-12 w-full max-w-3xl">
                   <!-- Old Way -->
                   <div class="group">
                     <div
-                      class="flex justify-between items-end text-sm font-mono text-[var(--color-text-muted)] mb-3 uppercase tracking-widest border-b border-dashed border-[var(--color-text-muted)] pb-1">
-                      <span>Traditional View</span>
+                      class="flex justify-between items-end text-base font-mono text-[var(--color-text-main)] opacity-70 mb-3 uppercase tracking-widest border-b border-dashed border-[var(--color-text-main)]/40 pb-1">
+                      <span>Request-Aware System</span>
                       <span class="text-[var(--color-status-red)] group-hover:text-red-400 transition-colors">Stateless
-                        Stream</span>
+                        Requests</span>
                     </div>
-                    <div class="flex gap-4">
+                    <div class="flex gap-4 mb-3">
                       <div
-                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        class="h-20 flex-1 border-2 border-[var(--color-text-main)]/40 border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-main)] opacity-50 text-lg font-mono">
                         Req1</div>
                       <div
-                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        class="h-20 flex-1 border-2 border-[var(--color-text-main)]/40 border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-main)] opacity-50 text-lg font-mono">
                         Req2</div>
                       <div
-                        class="h-20 flex-1 border-2 border-[var(--color-text-muted)] border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-muted)] opacity-60 text-lg font-mono">
+                        class="h-20 flex-1 border-2 border-[var(--color-text-main)]/40 border-dashed rounded-lg flex items-center justify-center text-[var(--color-text-main)] opacity-50 text-lg font-mono">
                         Req3</div>
                     </div>
+                    <p class="text-sm text-[var(--color-text-main)] opacity-60 font-body italic text-center">No knowledge of which
+                      requests belong together, when GPU is idle, or how to balance across nodes</p>
                   </div>
 
                   <!-- Arrow down -->
                   <div class="flex justify-center text-[var(--color-text-muted)]">
-                    <svg class="w-10 h-10 animate-bounce opacity-50" fill="none" stroke="currentColor"
+                    <svg class="w-10 h-10 animate-bounce opacity-70" fill="none" stroke="currentColor"
                       viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
@@ -1412,106 +1522,51 @@
                   <div class="group">
                     <div
                       class="flex justify-between items-end text-sm font-mono text-cyber-yellow mb-3 uppercase tracking-widest border-b border-cyber-yellow pb-1">
-                      <span>ThunderAgent View</span>
+                      <span>Program-Aware System</span>
                       <span class="text-cyber-yellow font-bold group-hover:text-yellow-300 transition-colors">Stateful
                         Programs</span>
                     </div>
 
                     <!-- Program A -->
-                    <div class="flex items-center gap-4 mb-6">
+                    <div class="flex items-center gap-4 mb-4">
                       <span class="text-xl font-mono text-cyber-yellow/80 w-12 text-right">P1</span>
                       <div
                         class="h-16 w-full border border-cyber-yellow rounded-lg flex items-center relative overflow-hidden bg-cyber-yellow/5 shadow-[0_0_15px_rgba(252,238,9,0.1)]">
                         <div
                           class="absolute inset-y-0 left-0 bg-cyber-yellow/20 w-1/3 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
-                          Thinking</div>
+                          Reasoning</div>
                         <div
                           class="absolute inset-y-0 left-1/3 bg-[var(--color-status-blue)]/20 w-1/4 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
-                          Tool</div>
+                          Acting</div>
                         <div
                           class="absolute inset-y-0 left-[58.33%] bg-cyber-yellow/20 w-1/3 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
-                          Thinking</div>
+                          Reasoning</div>
                       </div>
                     </div>
 
                     <!-- Program B -->
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-4 mb-4">
                       <span class="text-xl font-mono text-cyber-yellow/80 w-12 text-right">P2</span>
                       <div
-                        class="h-16 w-full border border-cyber-yellow rounded-lg flex items-center relative overflow-hidden bg-cyber-yellow/5 opacity-80 shadow-[0_0_15px_rgba(252,238,9,0.05)]">
+                        class="h-16 w-full border border-cyber-yellow rounded-lg flex items-center relative overflow-hidden bg-cyber-yellow/5 shadow-[0_0_15px_rgba(252,238,9,0.1)]">
                         <div
                           class="absolute inset-y-0 left-0 bg-[var(--color-status-blue)]/20 w-1/4 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
-                          Tool</div>
+                          Acting</div>
                         <div
                           class="absolute inset-y-0 left-1/4 bg-cyber-yellow/20 w-1/2 border-r border-cyber-yellow flex items-center justify-center text-sm font-bold text-cyber-yellow tracking-wide">
-                          Thinking</div>
+                          Reasoning</div>
                         <div
                           class="absolute inset-y-0 left-3/4 bg-[var(--color-status-blue)]/20 w-1/4 flex items-center justify-center text-sm font-bold text-[var(--color-status-blue)] tracking-wide">
-                          Tool</div>
+                          Acting</div>
                       </div>
                     </div>
+
+                    <p class="text-sm text-[var(--color-text-main)] opacity-80 font-body text-center mt-3 leading-relaxed">
+                      <span class="math-sym not-italic text-[#4fc1ff]">&tau;</span> reveals GPU idle windows &bull; <span class="math-sym not-italic text-[#4ade80]">c</span> guides eviction<br>
+                      <span class="math-sym not-italic text-[#fbbf24]">L</span> enables locality-aware routing &bull; <span class="math-sym not-italic text-[#fb923c]">s</span> enables cross-node load balancing
+                    </p>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <!-- 3. HOW Panel -->
-            <div id="prog-panel-how" class="prog-panel hidden animate-fadeIn">
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
-
-                <!-- Left: Interactive Code -->
-                <div
-                  class="bg-[#1e1e1e] border border-cyber-border rounded-lg shadow-xl overflow-hidden font-mono text-sm relative flex flex-col h-full">
-                  <div class="bg-[#2d2d2d] px-4 py-3 flex items-center gap-2 border-b border-[#3c3c3c] shrink-0">
-                    <div class="flex gap-2 mr-4">
-                      <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
-                      <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
-                      <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
-                    </div>
-                    <span class="text-gray-400 text-xs">thunder_agent/program.py</span>
-                  </div>
-
-                  <div class="p-6 overflow-y-auto flex-grow">
-                    <pre class="leading-tight"><span class="text-[#c586c0]">@dataclass</span>
-<span class="text-[#569cd6]">class</span> <span class="text-[#4ec9b0] font-bold">Program</span>:
-    <span class="text-[#ce9178]">"""A single program (task) with its status and state."""</span>
-    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Core Identity ---</span>
-    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('id')" onmouseenter="showProgDetail('id')">    <span class="text-white">program_id</span>: <span class="text-[#4ec9b0]">str</span></div>
-    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Execution Flow ---</span>
-    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('status')" onmouseenter="showProgDetail('status')">    <span class="text-white">status</span>: <span class="text-[#4ec9b0]">ProgramStatus</span> = <span class="text-[#4ec9b0]">ProgramStatus</span>.<span class="text-[#4fc1ff]">ACTING</span></div>
-    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('state')" onmouseenter="showProgDetail('state')">    <span class="text-white">state</span>: <span class="text-[#4ec9b0]">ProgramState</span> = <span class="text-[#4ec9b0]">ProgramState</span>.<span class="text-[#4fc1ff]">ACTIVE</span></div>
-    <span class="text-[#6a9955] italic block mt-3 mb-0"># --- Location & Resources ---</span>
-    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('backend')" onmouseenter="showProgDetail('backend')">    <span class="text-white">backend_url</span>: <span class="text-[#4ec9b0]">Optional</span>[<span class="text-[#4ec9b0]">str</span>] = <span class="text-[#569cd6]">None</span></div>
-    <div class="code-interactive py-0 px-1 -mx-1 rounded cursor-pointer transition-colors hover:bg-white/10" onclick="showProgDetail('context')" onmouseenter="showProgDetail('context')">    <span class="text-white">context_len</span>: <span class="text-[#4ec9b0]">int</span> = <span class="text-[#b5cea8]">0</span></div>
-</pre>
-                  </div>
-                  <div
-                    class="px-4 py-2 bg-[#252526] border-t border-[#3c3c3c] text-xs text-gray-500 italic text-center shrink-0">
-                    Hover or click properties to see details
-                  </div>
-                </div>
-
-                <!-- Right: Detail Panel -->
-                <div
-                  class="bg-cyber-panel border border-cyber-border rounded-lg p-8 flex flex-col justify-center relative overflow-hidden transition-all duration-300 layout-transition"
-                  id="prog-detail-container">
-                  <!-- Background Glow -->
-                  <div
-                    class="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-transparent to-cyber-yellow/5 pointer-events-none">
-                  </div>
-
-                  <div id="prog-detail-content" class="relative z-10 animate-fadeIn">
-                    <!-- Default Content -->
-                    <div class="flex flex-col items-center text-center text-[var(--color-text-muted)] space-y-4">
-                      <svg class="w-16 h-16 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                          d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-                      </svg>
-                      <p class="text-xl">Select a property on the left to view its details.</p>
-                    </div>
-                  </div>
-                </div>
-
               </div>
             </div>
 
@@ -1608,7 +1663,7 @@
                 To catch this, ThunderAgent employs a
                 <span class="text-[var(--color-status-red)] font-bold">periodic monitor</span> that evaluates the memory
                 usage of each
-                GPU node at fixed intervals <span class="font-mono text-[var(--color-status-red)]">&Delta;t</span>,
+                GPU node at fixed intervals <span class="math-sym text-[var(--color-status-red)]">&Delta;t</span>,
                 enabling preemptive detection of memory pressure before it degrades throughput.
               </p>
 
@@ -1664,7 +1719,7 @@
                     cost
                     of caching against recomputation, ThunderAgent applies an <span
                       class="text-[var(--color-status-red)] font-bold">exponential time-decay function</span>
-                    <span class="font-mono text-[var(--color-status-red)]">f(t)</span> that progressively discounts the
+                    <span class="math-sym text-[var(--color-status-red)]">f(t)</span> that progressively discounts the
                     effective memory
                     weight of acting programs. This encourages the scheduler to pause and evict long-idle contexts when
                     memory pressure rises, rather than holding them indefinitely.
@@ -1800,7 +1855,7 @@
                     <p
                       class="font-body text-xl text-[var(--color-text-main)] leading-loose tracking-wide max-w-3xl text-justify mx-auto mb-4">
                       ThunderAgent implements lifecycle hooks that strictly couple tool resource persistence with the
-                      program's scheduling status <span class="font-mono text-[var(--color-status-red)]">s</span>. When
+                      program's scheduling status <span class="math-sym text-[var(--color-status-red)]">s</span>. When
                       a program is <span class="text-[var(--color-status-red)] font-bold">Terminated</span>, the
                       collector triggers an immediate teardown
                       sequence that systematically reclaiming sandboxes, Docker containers, network sockets, and compute
@@ -1960,9 +2015,9 @@
     const moonIcon = document.getElementById('moon-icon');
     const htmlElement = document.documentElement;
 
-    // Check Local Storage
+    // Check Local Storage — default to 'dark'
     const savedTheme = localStorage.getItem('theme');
-    const systemTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    const systemTheme = 'dark';
 
     // Apply Theme
     function applyTheme(theme) {
@@ -1976,6 +2031,9 @@
         moonIcon.classList.add('hidden');
       }
     }
+
+    // Initialize Theme — default to light
+    applyTheme(savedTheme || systemTheme);
 
     // Font Logic
     const root = document.documentElement;
@@ -2007,10 +2065,12 @@
       localStorage.setItem('font-style', style);
     }
 
-    // Initialize Font
+    // Initialize Font — default to 'clean' if no saved preference
     const savedFont = localStorage.getItem('font-style');
     if (savedFont && fonts[savedFont]) {
       changeFont(savedFont);
+    } else {
+      changeFont('clean');
     }
 
     // Event Listener
@@ -2043,53 +2103,7 @@
       activeBtn.classList.add('text-cyber-yellow', 'border-cyber-yellow');
     }
 
-    const progDetails = {
-      'id': {
-        title: 'Program Identifier (ID)',
-        desc: 'Unique ID tracking which requests belong to the same program. This allows the system to maintain state across multiple turns.',
-        color: 'text-cyber-yellow'
-      },
-      'status': {
-        title: 'Execution Phase (Status)',
-        desc: '<b>Reasoning</b> (consuming GPU resources) vs <b>Acting</b> (consuming CPU tool resources).',
-        color: 'text-[#4fc1ff]'
-      },
-      'state': {
-        title: 'Lifecycle State',
-        desc: 'Global lifecycle status: <b>Active</b> (running), <b>Paused</b> (in global waiting queue), or <b>Terminated</b> (finished).',
-        color: 'text-[#4fc1ff]'
-      },
-      'backend': {
-        title: 'Backend Location',
-        desc: 'Pointer to the physical GPU node hosting this program.',
-        color: 'text-fuchsia-400'
-      },
-      'context': {
-        title: 'Context Metrics',
-        desc: 'Used by the scheduler to prevent KV thrashing and balance memory load across nodes.',
-        color: 'text-[#b5cea8]'
-      }
-    };
-
-    function showProgDetail(key) {
-      const data = progDetails[key];
-      if (!data) return;
-
-      const container = document.getElementById('prog-detail-content');
-
-      // Simple fade effect
-      container.style.opacity = '0';
-
-      setTimeout(() => {
-        container.innerHTML = `
-          <div class="flex flex-col items-start gap-4">
-             <h4 class="font-mono text-3xl font-bold ${data.color} mb-2 border-b border-gray-700 pb-2 w-full">${data.title}</h4>
-             <p class="font-body text-xl text-[var(--color-text-main)] leading-relaxed">${data.desc}</p>
-          </div>
-        `;
-        container.style.opacity = '1';
-      }, 150);
-    }
+    // (progDetails and showProgDetail removed — code snippet panel was dropped)
   </script>
 </body>
 
